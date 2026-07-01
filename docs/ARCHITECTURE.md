@@ -43,10 +43,10 @@ flowchart LR
 - Chroma-key/corner-color background removal.
 - Optional local-command segmentation fallback, such as `rembg i {input} {output}`.
 - Fixed-grid contact sheet slicing for 3x3, 4x3, and other sprite consistency workflows.
-- Optional transparent-edge trimming.
+- Transparent-edge trimming with configurable safety padding.
 - Optional power-of-two padding.
 - Sprite sheet packing.
-- TexturePacker-style `.plist` output.
+- TexturePacker-style `.plist` output with `sourceSize`, `sourceColorRect`, and trimmed-frame `offset` metadata.
 - `.cocos-asset.json` manifests.
 
 `src/processing/audio.ts` handles:

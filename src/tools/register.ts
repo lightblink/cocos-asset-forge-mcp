@@ -6,6 +6,7 @@ import { redactConfig } from "../config/load.js";
 import type { AudioProvider, ImageProvider } from "../generation/types.js";
 import { adaptAudioBuffer } from "../processing/audio.js";
 import { adaptImageBuffer, makeSpriteSheet, splitGridImageToBuffers } from "../processing/image.js";
+import type { AdaptedImage } from "../processing/image.js";
 import type { AssetReport } from "../schemas/common.js";
 import { slugify, withTimestamp } from "../utils/fs.js";
 import {
@@ -97,6 +98,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
     const outputDir = resolveOutputDir(context.config, input.outputDir, baseName);
     const framesDir = join(outputDir, "frames");
     const framePaths: string[] = [];
+    const adaptedFrames: AdaptedImage[] = [];
+    const warnings: string[] = [];
     for (let index = 0; index < input.frameCount; index += 1) {
       const generated = await context.imageProvider.generateImage({
         prompt: `${input.prompt}\nAnimation action: ${input.action}. Frame ${index + 1} of ${input.frameCount}. Keep the same character proportions, camera, and silhouette.`,
@@ -119,9 +122,11 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         ...withDefaultChromaKey(input.postprocess)
       });
       framePaths.push(adapted.path);
+      adaptedFrames.push(adapted);
+      warnings.push(...adapted.warnings);
     }
 
-    const sheet = await makeSpriteSheet(framePaths, {
+    const sheet = await makeSpriteSheet(adaptedFrames, {
       name: `${baseName}-${slugify(input.action)}`,
       outputDir,
       overwrite: context.config.safety.overwrite,
@@ -137,7 +142,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       kind: "sprite-sheet",
       files: [...framePaths, sheet.imagePath, sheet.plistPath],
       manifest: sheet.manifestPath,
-      warnings: [],
+      warnings,
       importPath: cocosImportPath(context.config, sheet.imagePath),
       recommendedType: "SpriteAtlas + AnimationClip",
       notes: [
@@ -204,6 +209,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       limit: frameCount
     });
     const framePaths: string[] = [];
+    const adaptedFrames: AdaptedImage[] = [];
     const warnings: string[] = [];
     for (const frame of frameBuffers) {
       const adapted = await adaptImageBuffer(frame.buffer, {
@@ -217,10 +223,11 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
           : input.postprocess.chromaKey
       });
       framePaths.push(adapted.path);
+      adaptedFrames.push(adapted);
       warnings.push(...adapted.warnings);
     }
 
-    const sheet = await makeSpriteSheet(framePaths, {
+    const sheet = await makeSpriteSheet(adaptedFrames, {
       name: `${baseName}-${slugify(input.action)}-grid`,
       outputDir,
       overwrite: context.config.safety.overwrite,

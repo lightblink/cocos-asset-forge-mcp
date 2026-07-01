@@ -21,7 +21,7 @@
 
 ## 亮点
 
-- 面向 Cocos 的输出：真正 RGBA 透明 PNG、帧 manifest、`.plist` 图集元数据，以及适合 AudioClip 的 WAV/MP3/OGG。
+- 面向 Cocos 的输出：真正 RGBA 透明 PNG、按 alpha 边界裁剪并保留安全透明边、帧 manifest、`.plist` 图集元数据，以及适合 AudioClip 的 WAV/MP3/OGG。
 - 本地抠图管线：默认让模型生成纯 `#00ff00` 色键背景，再由 Asset Forge 本地删除与边界连通的背景区域，而不是相信模型画出来的假透明棋盘格。
 - 可选本地分割 backend：可以配置 `rembg` 这类本地命令，用来处理已有图片、复杂背景，或在色键抠图不足时自动兜底。
 - 一致性优先的动画流程：一次生成 3x3/4x3 contact sheet，切割成帧、清透明通道，再重新打包给 Cocos。
@@ -33,8 +33,8 @@
 
 AI 生成素材很有用，但模型原始输出通常不是可靠的游戏素材管线：
 
-- 精灵图需要真正 alpha，而不是画出来的棋盘格；同时还需要稳定尺寸、可预测命名和可导入 PNG。
-- 动画帧需要稳定顺序、固定帧尺寸、图集和帧坐标元数据。
+- 精灵图需要真正 alpha，而不是画出来的棋盘格；同时还需要裁掉无意义透明边、可预测命名和可导入 PNG。
+- 动画帧需要稳定顺序、固定原始帧盒、图集和能保留裁剪偏移的帧坐标元数据。
 - 人物一致性通常需要“一次生成九宫格/十二宫格 contact sheet，再切割”，而不是逐帧独立生成。
 - 瓦片图需要网格打包和地图编辑器友好的元数据。
 - 音频需要 Cocos 支持的格式、采样率/声道归一化，以及音效/循环音乐意图。
@@ -224,6 +224,8 @@ fal 音频示例：
 
 对于透明精灵，Asset Forge 默认使用色键工作流：先要求模型生成纯 `#00ff00` 背景，再本地删除与图片边界连通的色键区域。这样输出的是确实带 alpha 的 PNG，也能避免把 AI 画出来的棋盘格误当成透明通道。
 
+清理 alpha 之后，默认会按可见 alpha 边界裁剪，并保留少量透明安全边。对于序列帧图集，Asset Forge 会通过 manifest 和 `.plist` 写入 `sourceSize`、`sourceColorRect` 和 `offset`，保留每帧在原始帧盒里的位置，避免因为逐帧裁剪而被重新居中、导致动画抖动。
+
 如果输入背景不可控，可以配置 `cutout.backend`：
 
 - `auto`: 先走色键抠图；如果抠除比例太低，并且配置了 `command`，就自动回退到本地分割。
@@ -265,6 +267,8 @@ fal 音频示例：
 - `cocos.importPath`: 尽可能推断的 Cocos 项目相对路径。
 - `cocos.recommendedType`: 推荐导入类型，例如 SpriteFrame、SpriteAtlas、AudioClip、TiledMap texture。
 - `cocos.notes`: 给调用 Agent 的下一步建议。
+
+图片后处理默认值是 `transparentBackground: true`、`trimTransparentEdges: true`、`trimTransparentPadding: 2`。如果是固定尺寸瓦片、背景图，或者画布本身有意义的素材，可以关闭裁剪。
 
 ## 开发
 

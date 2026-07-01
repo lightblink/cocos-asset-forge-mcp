@@ -13,6 +13,7 @@ export type ImageAdaptOptions = {
   transparentBackground: boolean;
   chromaKey?: { color?: string; tolerance: number };
   trimTransparentEdges: boolean;
+  trimTransparentPadding?: number;
   padToPowerOfTwo: boolean;
   extrudePixels: number;
   maxTextureSize: number;
@@ -31,6 +32,9 @@ export type AdaptedImage = {
   path: string;
   width: number;
   height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  trim?: TrimRect;
   warnings: string[];
 };
 
@@ -45,6 +49,17 @@ type RemoveBackgroundResult = {
 type LocalCutoutResult = {
   bytes: Buffer;
   warnings: string[];
+};
+
+type NormalizedSpriteSheetFrame = {
+  path: string;
+  packedWidth: number;
+  packedHeight: number;
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  hasTrimMetadata: boolean;
 };
 
 export type SpriteSheetOptions = {
@@ -64,6 +79,10 @@ export type SpriteFrame = {
   y: number;
   width: number;
   height: number;
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
 };
 
 export type SpriteSheetResult = {
@@ -72,6 +91,16 @@ export type SpriteSheetResult = {
   plistPath: string;
   frames: SpriteFrame[];
 };
+
+export type TrimRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  padding: number;
+};
+
+export type SpriteSheetInputFrame = string | Pick<AdaptedImage, "path" | "sourceWidth" | "sourceHeight" | "trim">;
 
 export type GridFrameBuffer = {
   index: number;
@@ -86,6 +115,10 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
   await ensureDir(options.outputDir);
   const warnings: string[] = [];
   let image = sharp(buffer, { animated: false }).ensureAlpha();
+  const sourceMeta = await image.metadata();
+  const sourceWidth = sourceMeta.width ?? 0;
+  const sourceHeight = sourceMeta.height ?? 0;
+  let trim: TrimRect | undefined;
 
   if (options.transparentBackground) {
     if (shouldRunLocalCommandFirst(options.cutout)) {
@@ -119,7 +152,10 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
   }
 
   if (options.trimTransparentEdges) {
-    image = image.trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } });
+    const trimmed = await trimTransparentImage(image, options.trimTransparentPadding ?? 2);
+    image = trimmed.image;
+    trim = trimmed.trim;
+    if (!trim) warnings.push("Transparent-edge trim was requested, but no visible pixels were found.");
   }
 
   const meta = await image.metadata();
@@ -144,39 +180,46 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
     image = await padToPowerOfTwo(image);
   }
 
-  const finalMeta = await image.metadata();
+  const outputBuffer = await image.png({ compressionLevel: 9 }).toBuffer();
+  const finalMeta = await sharp(outputBuffer).metadata();
   const outputPath = join(options.outputDir, `${options.name}.png`);
-  await writeFileSafe(outputPath, await image.png({ compressionLevel: 9 }).toBuffer(), options.overwrite);
+  await writeFileSafe(outputPath, outputBuffer, options.overwrite);
 
   return {
     path: outputPath,
     width: finalMeta.width ?? 0,
     height: finalMeta.height ?? 0,
+    sourceWidth,
+    sourceHeight,
+    trim,
     warnings
   };
 }
 
-export async function makeSpriteSheet(framePaths: string[], options: SpriteSheetOptions): Promise<SpriteSheetResult> {
-  if (framePaths.length === 0) throw new Error("At least one frame is required");
+export async function makeSpriteSheet(framesInput: SpriteSheetInputFrame[], options: SpriteSheetOptions): Promise<SpriteSheetResult> {
+  if (framesInput.length === 0) throw new Error("At least one frame is required");
   await ensureDir(options.outputDir);
-  const rows = Math.ceil(framePaths.length / options.columns);
+  const rows = Math.ceil(framesInput.length / options.columns);
   const width = options.margin * 2 + options.columns * options.frameWidth + (options.columns - 1) * options.padding;
   const height = options.margin * 2 + rows * options.frameHeight + (rows - 1) * options.padding;
+  const frameSources = await Promise.all(framesInput.map(normalizeSpriteSheetFrame));
 
   const composites = await Promise.all(
-    framePaths.map(async (path, index) => {
+    frameSources.map(async (frame, index) => {
       const column = index % options.columns;
       const row = Math.floor(index / options.columns);
       const left = options.margin + column * (options.frameWidth + options.padding);
       const top = options.margin + row * (options.frameHeight + options.padding);
-      const input = await sharp(path)
-        .ensureAlpha()
-        .resize(options.frameWidth, options.frameHeight, {
-          fit: "contain",
-          background: { r: 0, g: 0, b: 0, alpha: 0 }
-        })
-        .png()
-        .toBuffer();
+      const input = frame.hasTrimMetadata
+        ? await sharp(frame.path).ensureAlpha().png().toBuffer()
+        : await sharp(frame.path)
+          .ensureAlpha()
+          .resize(options.frameWidth, options.frameHeight, {
+            fit: "contain",
+            background: { r: 0, g: 0, b: 0, alpha: 0 }
+          })
+          .png()
+          .toBuffer();
       return { input, left, top };
     })
   );
@@ -193,15 +236,23 @@ export async function makeSpriteSheet(framePaths: string[], options: SpriteSheet
     .png({ compressionLevel: 9 })
     .toBuffer();
 
-  const frames = framePaths.map((path, index) => {
+  const frames = frameSources.map((frame, index) => {
     const column = index % options.columns;
     const row = Math.floor(index / options.columns);
+    const frameWidth = frame.hasTrimMetadata ? frame.packedWidth : options.frameWidth;
+    const frameHeight = frame.hasTrimMetadata ? frame.packedHeight : options.frameHeight;
+    const sourceWidth = frame.hasTrimMetadata ? frame.sourceWidth : options.frameWidth;
+    const sourceHeight = frame.hasTrimMetadata ? frame.sourceHeight : options.frameHeight;
     return {
-      name: basename(path, ".png"),
+      name: basename(frame.path, ".png"),
       x: options.margin + column * (options.frameWidth + options.padding),
       y: options.margin + row * (options.frameHeight + options.padding),
-      width: options.frameWidth,
-      height: options.frameHeight
+      width: frameWidth,
+      height: frameHeight,
+      sourceX: frame.hasTrimMetadata ? frame.sourceX : 0,
+      sourceY: frame.hasTrimMetadata ? frame.sourceY : 0,
+      sourceWidth,
+      sourceHeight
     };
   });
 
@@ -309,11 +360,18 @@ async function removeBackground(
   const raw = await image.raw().toBuffer({ resolveWithObject: true });
   const channels = raw.info.channels;
   const data = Buffer.from(raw.data);
+  const explicitKey = Boolean(chromaKey?.color);
   const key = chromaKey?.color ? hexToRgb(chromaKey.color) : sampleCornerColor(data, raw.info.width, raw.info.height, channels);
   const tolerance = chromaKey?.tolerance ?? 42;
   const mask = floodFillBackgroundMask(data, raw.info.width, raw.info.height, channels, key, tolerance);
+  if (explicitKey) {
+    const cornerKey = sampleCornerColor(data, raw.info.width, raw.info.height, channels);
+    if (rgbDistance(cornerKey, key) > tolerance && isLikelyGeneratedFrameBackground(cornerKey)) {
+      mergeMask(mask, floodFillBackgroundMask(data, raw.info.width, raw.info.height, channels, cornerKey, Math.min(48, Math.max(18, tolerance))));
+    }
+  }
   if (isGreenKey(key)) {
-    removeConnectedGreenSpill(data, raw.info.width, raw.info.height, channels, mask);
+    removeConnectedDominantGreen(data, raw.info.width, raw.info.height, channels, mask);
   }
   let removedPixels = 0;
 
@@ -433,6 +491,91 @@ async function runCommand(command: string, args: string[], timeoutMs: number): P
   });
 }
 
+async function trimTransparentImage(
+  image: sharp.Sharp,
+  padding: number
+): Promise<{ image: sharp.Sharp; trim?: TrimRect }> {
+  const raw = await image.raw().toBuffer({ resolveWithObject: true });
+  const data = raw.data;
+  const channels = raw.info.channels;
+  const width = raw.info.width;
+  const height = raw.info.height;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * channels + 3];
+      if (alpha <= 8) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return {
+      image: sharp(data, { raw: { width, height, channels } })
+    };
+  }
+
+  const safePadding = Math.max(0, Math.floor(padding));
+  const left = Math.max(0, minX - safePadding);
+  const top = Math.max(0, minY - safePadding);
+  const right = Math.min(width - 1, maxX + safePadding);
+  const bottom = Math.min(height - 1, maxY + safePadding);
+  const trimWidth = right - left + 1;
+  const trimHeight = bottom - top + 1;
+
+  return {
+    image: sharp(data, { raw: { width, height, channels } }).extract({
+      left,
+      top,
+      width: trimWidth,
+      height: trimHeight
+    }),
+    trim: {
+      x: left,
+      y: top,
+      width: trimWidth,
+      height: trimHeight,
+      padding: safePadding
+    }
+  };
+}
+
+async function normalizeSpriteSheetFrame(frame: SpriteSheetInputFrame): Promise<NormalizedSpriteSheetFrame> {
+  const path = typeof frame === "string" ? frame : frame.path;
+  const meta = await sharp(path).metadata();
+  const packedWidth = meta.width ?? 0;
+  const packedHeight = meta.height ?? 0;
+  if (typeof frame !== "string" && frame.trim) {
+    return {
+      path,
+      packedWidth,
+      packedHeight,
+      sourceX: frame.trim.x,
+      sourceY: frame.trim.y,
+      sourceWidth: frame.sourceWidth,
+      sourceHeight: frame.sourceHeight,
+      hasTrimMetadata: true
+    };
+  }
+  return {
+    path,
+    packedWidth,
+    packedHeight,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: packedWidth,
+    sourceHeight: packedHeight,
+    hasTrimMetadata: false
+  };
+}
+
 async function extrudeTransparentBorder(image: sharp.Sharp, pixels: number): Promise<sharp.Sharp> {
   const buffer = await image.png().toBuffer();
   const meta = await sharp(buffer).metadata();
@@ -506,7 +649,7 @@ function floodFillBackgroundMask(
   return mask;
 }
 
-function removeConnectedGreenSpill(
+function removeConnectedDominantGreen(
   data: Buffer,
   width: number,
   height: number,
@@ -514,32 +657,44 @@ function removeConnectedGreenSpill(
   mask: Uint8Array
 ): void {
   const total = width * height;
-  const iterations = 4;
-  for (let pass = 0; pass < iterations; pass += 1) {
-    const additions: number[] = [];
-    for (let pixel = 0; pixel < total; pixel += 1) {
-      if (mask[pixel] === 1) continue;
-      if (!isDominantGreen(data, pixel * channels)) continue;
-      if (touchesMask(pixel, width, height, mask)) additions.push(pixel);
-    }
-    if (additions.length === 0) return;
-    for (const pixel of additions) mask[pixel] = 1;
+  const queue = new Int32Array(total);
+  let head = 0;
+  let tail = 0;
+
+  function enqueue(pixel: number): void {
+    if (pixel < 0 || pixel >= total || mask[pixel] === 1) return;
+    if (!isDominantGreen(data, pixel * channels)) return;
+    mask[pixel] = 1;
+    queue[tail] = pixel;
+    tail += 1;
+  }
+
+  for (let pixel = 0; pixel < total; pixel += 1) {
+    if (mask[pixel] !== 1) continue;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    if (x > 0) enqueue(pixel - 1);
+    if (x < width - 1) enqueue(pixel + 1);
+    if (y > 0) enqueue(pixel - width);
+    if (y < height - 1) enqueue(pixel + width);
+  }
+
+  while (head < tail) {
+    const pixel = queue[head];
+    head += 1;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    if (x > 0) enqueue(pixel - 1);
+    if (x < width - 1) enqueue(pixel + 1);
+    if (y > 0) enqueue(pixel - width);
+    if (y < height - 1) enqueue(pixel + width);
   }
 }
 
-function touchesMask(pixel: number, width: number, height: number, mask: Uint8Array): boolean {
-  const x = pixel % width;
-  const y = Math.floor(pixel / width);
-  return (
-    (x > 0 && mask[pixel - 1] === 1) ||
-    (x < width - 1 && mask[pixel + 1] === 1) ||
-    (y > 0 && mask[pixel - width] === 1) ||
-    (y < height - 1 && mask[pixel + width] === 1) ||
-    (x > 0 && y > 0 && mask[pixel - width - 1] === 1) ||
-    (x < width - 1 && y > 0 && mask[pixel - width + 1] === 1) ||
-    (x > 0 && y < height - 1 && mask[pixel + width - 1] === 1) ||
-    (x < width - 1 && y < height - 1 && mask[pixel + width + 1] === 1)
-  );
+function mergeMask(target: Uint8Array, source: Uint8Array): void {
+  for (let i = 0; i < target.length; i += 1) {
+    if (source[i] === 1) target[i] = 1;
+  }
 }
 
 function isBackgroundLike(data: Buffer, offset: number, key: Rgb, tolerance: number): boolean {
@@ -565,6 +720,16 @@ function colorDistance(data: Buffer, offset: number, key: Rgb): number {
     (data[offset + 1] - key.g) ** 2 +
     (data[offset + 2] - key.b) ** 2
   );
+}
+
+function rgbDistance(a: Rgb, b: Rgb): number {
+  return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
+}
+
+function isLikelyGeneratedFrameBackground(color: Rgb): boolean {
+  const max = Math.max(color.r, color.g, color.b);
+  const min = Math.min(color.r, color.g, color.b);
+  return max - min <= 24 && (max >= 220 || max <= 36);
 }
 
 function sampleCornerColor(data: Buffer, width: number, height: number, channels: number): Rgb {
@@ -597,14 +762,25 @@ function nextPowerOfTwo(value: number): number {
 }
 
 function makeTexturePackerPlist(image: string, width: number, height: number, frames: SpriteFrame[]): string {
+  const formatOffset = (frame: SpriteFrame) => {
+    const x = frame.sourceX + frame.width / 2 - frame.sourceWidth / 2;
+    const y = frame.sourceHeight / 2 - (frame.sourceY + frame.height / 2);
+    return `{${formatPlistNumber(x)},${formatPlistNumber(y)}}`;
+  };
   const frameEntries = frames.map((frame) => `
     <key>${escapeXml(frame.name)}</key>
     <dict>
+      <key>aliases</key><array/>
       <key>frame</key><string>{{${frame.x},${frame.y}},{${frame.width},${frame.height}}}</string>
-      <key>offset</key><string>{0,0}</string>
+      <key>offset</key><string>${formatOffset(frame)}</string>
       <key>rotated</key><false/>
-      <key>sourceColorRect</key><string>{{0,0},{${frame.width},${frame.height}}}</string>
-      <key>sourceSize</key><string>{${frame.width},${frame.height}}</string>
+      <key>sourceColorRect</key><string>{{${frame.sourceX},${frame.sourceY}},{${frame.width},${frame.height}}}</string>
+      <key>sourceSize</key><string>{${frame.sourceWidth},${frame.sourceHeight}}</string>
+      <key>spriteOffset</key><string>${formatOffset(frame)}</string>
+      <key>spriteSize</key><string>{${frame.width},${frame.height}}</string>
+      <key>spriteSourceSize</key><string>{${frame.sourceWidth},${frame.sourceHeight}}</string>
+      <key>textureRect</key><string>{{${frame.x},${frame.y}},{${frame.width},${frame.height}}}</string>
+      <key>textureRotated</key><false/>
     </dict>`).join("");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -632,4 +808,8 @@ function escapeXml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function formatPlistNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
 }

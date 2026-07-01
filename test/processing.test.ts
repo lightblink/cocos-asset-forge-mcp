@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -37,6 +37,61 @@ describe("asset processing pipeline", () => {
     }
   });
 
+  it("trims transparent sprite edges with safe padding and records the source rect", async () => {
+    const dir = await tempDir();
+    try {
+      const source = await sharp({
+        create: {
+          width: 32,
+          height: 32,
+          channels: 4,
+          background: "#00ff00"
+        }
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 10,
+                height: 12,
+                channels: 4,
+                background: { r: 210, g: 40, b: 40, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 8,
+            top: 9
+          }
+        ])
+        .png()
+        .toBuffer();
+
+      const adapted = await adaptImageBuffer(source, {
+        name: "trimmed-hero",
+        outputDir: dir,
+        overwrite: true,
+        transparentBackground: true,
+        chromaKey: { color: "#00ff00", tolerance: 58 },
+        trimTransparentEdges: true,
+        trimTransparentPadding: 2,
+        padToPowerOfTwo: false,
+        extrudePixels: 0,
+        maxTextureSize: 256
+      });
+
+      expect(adapted.width).toBe(14);
+      expect(adapted.height).toBe(16);
+      expect(adapted.sourceWidth).toBe(32);
+      expect(adapted.sourceHeight).toBe(32);
+      expect(adapted.trim).toEqual({ x: 6, y: 7, width: 14, height: 16, padding: 2 });
+      const raw = await sharp(adapted.path).raw().toBuffer({ resolveWithObject: true });
+      expect(raw.data[3]).toBe(0);
+      const subjectOffset = (3 * raw.info.width + 3) * raw.info.channels;
+      expect(raw.data[subjectOffset + 3]).toBe(255);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("packs frames into a sprite sheet with manifest files", async () => {
     const dir = await tempDir();
     try {
@@ -69,6 +124,78 @@ describe("asset processing pipeline", () => {
       expect(sheet.frames).toHaveLength(3);
       expect(sheet.manifestPath.endsWith(".cocos-asset.json")).toBe(true);
       expect(sheet.plistPath.endsWith(".plist")).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("packs trimmed frames with source rect metadata for Cocos animation alignment", async () => {
+    const dir = await tempDir();
+    try {
+      const source = await sharp({
+        create: {
+          width: 32,
+          height: 32,
+          channels: 4,
+          background: "#00ff00"
+        }
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 8,
+                height: 10,
+                channels: 4,
+                background: { r: 80, g: 90, b: 220, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 11,
+            top: 12
+          }
+        ])
+        .png()
+        .toBuffer();
+
+      const adapted = await adaptImageBuffer(source, {
+        name: "run-001",
+        outputDir: dir,
+        overwrite: true,
+        transparentBackground: true,
+        chromaKey: { color: "#00ff00", tolerance: 58 },
+        trimTransparentEdges: true,
+        trimTransparentPadding: 1,
+        padToPowerOfTwo: false,
+        extrudePixels: 0,
+        maxTextureSize: 256
+      });
+
+      const sheet = await makeSpriteSheet([adapted], {
+        name: "run",
+        outputDir: dir,
+        overwrite: true,
+        frameWidth: 32,
+        frameHeight: 32,
+        columns: 1,
+        padding: 0,
+        margin: 0
+      });
+
+      expect(sheet.frames[0]).toMatchObject({
+        width: 10,
+        height: 12,
+        sourceX: 10,
+        sourceY: 11,
+        sourceWidth: 32,
+        sourceHeight: 32
+      });
+      const plist = await readFile(sheet.plistPath, "utf8");
+      expect(plist).toContain("<key>sourceColorRect</key><string>{{10,11},{10,12}}</string>");
+      expect(plist).toContain("<key>sourceSize</key><string>{32,32}</string>");
+      expect(plist).toContain("<key>textureRect</key><string>{{0,0},{10,12}}</string>");
+      expect(plist).toContain("<key>spriteOffset</key><string>{-1,-1}</string>");
+      expect(plist).toContain("<key>spriteSize</key><string>{10,12}</string>");
+      expect(plist).toContain("<key>spriteSourceSize</key><string>{32,32}</string>");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -275,6 +402,69 @@ describe("asset processing pipeline", () => {
       const subjectOffset = (16 * raw.info.width + 16) * raw.info.channels;
       expect(raw.data[spillOffset + 3]).toBe(0);
       expect(raw.data[subjectOffset + 3]).toBe(255);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes AI contact-sheet frame borders before chroma-key trimming", async () => {
+    const dir = await tempDir();
+    try {
+      const source = await sharp({
+        create: {
+          width: 32,
+          height: 32,
+          channels: 4,
+          background: "#ffffff"
+        }
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 24,
+                height: 24,
+                channels: 4,
+                background: "#00ff00"
+              }
+            }).png().toBuffer(),
+            left: 4,
+            top: 4
+          },
+          {
+            input: await sharp({
+              create: {
+                width: 8,
+                height: 6,
+                channels: 4,
+                background: { r: 210, g: 40, b: 40, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 12,
+            top: 13
+          }
+        ])
+        .png()
+        .toBuffer();
+
+      const adapted = await adaptImageBuffer(source, {
+        name: "contact-sheet-cell",
+        outputDir: dir,
+        overwrite: true,
+        transparentBackground: true,
+        chromaKey: { color: "#00ff00", tolerance: 58 },
+        trimTransparentEdges: true,
+        trimTransparentPadding: 0,
+        padToPowerOfTwo: false,
+        extrudePixels: 0,
+        maxTextureSize: 256
+      });
+
+      expect(adapted.width).toBe(8);
+      expect(adapted.height).toBe(6);
+      expect(adapted.trim).toEqual({ x: 12, y: 13, width: 8, height: 6, padding: 0 });
+      const raw = await sharp(adapted.path).raw().toBuffer({ resolveWithObject: true });
+      expect(raw.data[3]).toBe(255);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

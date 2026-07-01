@@ -21,7 +21,7 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 
 ## Highlights
 
-- Cocos-ready output: real RGBA transparent PNGs, frame manifests, `.plist` atlas metadata, and AudioClip-friendly WAV/MP3/OGG files.
+- Cocos-ready output: real RGBA transparent PNGs, alpha-bounds trimming with safe padding, frame manifests, `.plist` atlas metadata, and AudioClip-friendly WAV/MP3/OGG files.
 - Local cutout pipeline: generated sprites use a flat `#00ff00` chroma-key background by default, then Asset Forge removes the connected background locally instead of trusting fake AI checkerboards.
 - Optional local segmentation backend: configure a command such as `rembg` for difficult existing images or automatic fallback when chroma-key removal is not enough.
 - Consistency-first animation workflow: generate a 3x3/4x3 contact sheet, slice it into frames, clean alpha, then repack it for Cocos.
@@ -33,8 +33,8 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 
 AI asset generation is useful, but raw model output is not a complete game asset pipeline:
 
-- Sprites need real alpha, not a drawn checkerboard, plus stable dimensions, predictable names, and importable PNG files.
-- Animation frames need stable ordering, fixed cell sizes, packed sheets, and frame coordinate metadata.
+- Sprites need real alpha, not a drawn checkerboard, plus trimmed transparent bounds, predictable names, and importable PNG files.
+- Animation frames need stable ordering, fixed source frame boxes, packed sheets, and frame coordinate metadata that preserves trimmed-frame offsets.
 - Character consistency often benefits from one 3x3/4x3 contact sheet that is sliced into frames, rather than independent per-frame generations.
 - Tiles need grid packing and map-editor-friendly metadata.
 - Audio needs Cocos-supported formats, sample-rate/channel normalization, and explicit SFX/music-loop intent.
@@ -224,6 +224,8 @@ Use `asset_forge_generate_sprite_sheet` only when the provider cannot produce cl
 
 For transparent sprites, Asset Forge defaults to a chroma-key workflow: it asks the model for a flat `#00ff00` background, then removes only the key-colored region connected to the image border. This produces real alpha PNGs and avoids treating AI-drawn checkerboards as transparency.
 
+After alpha cleanup, sprites are trimmed to their visible alpha bounds with a small transparent safety padding by default. For animation sheets, Asset Forge keeps the original frame-box dimensions in the manifest and `.plist` through `sourceSize`, `sourceColorRect`, and `offset`, so Cocos-side animation alignment can survive per-frame trimming instead of re-centering every frame.
+
 When source backgrounds are not controlled, configure `cutout.backend`:
 
 - `auto`: chroma-key first; if too little background is removed and `command` is configured, fall back to local segmentation.
@@ -265,6 +267,8 @@ Every generation tool returns JSON text with:
 - `cocos.importPath`: best-effort Cocos project-relative path.
 - `cocos.recommendedType`: recommended import type, such as SpriteFrame, SpriteAtlas, AudioClip, or TiledMap texture.
 - `cocos.notes`: next steps for the calling agent.
+
+Image postprocessing defaults to `transparentBackground: true`, `trimTransparentEdges: true`, and `trimTransparentPadding: 2`. Turn trimming off for fixed-size tiles, backgrounds, or any asset where the full canvas is itself meaningful.
 
 ## Development
 

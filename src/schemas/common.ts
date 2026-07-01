@@ -31,7 +31,8 @@ export const imagePostprocessBaseSchema = z
         tolerance: z.number().min(0).max(255).default(28)
       })
       .optional(),
-    trimTransparentEdges: z.boolean().default(false),
+    trimTransparentEdges: z.boolean().default(true),
+    trimTransparentPadding: z.number().int().min(0).max(64).default(2),
     padToPowerOfTwo: z.boolean().default(false),
     extrudePixels: z.number().int().min(0).max(16).default(0),
     maxTextureSize: z.number().int().positive().max(8192).default(2048)
@@ -39,7 +40,8 @@ export const imagePostprocessBaseSchema = z
 
 export const imagePostprocessSchema = imagePostprocessBaseSchema.default({
     transparentBackground: true,
-    trimTransparentEdges: false,
+    trimTransparentEdges: true,
+    trimTransparentPadding: 2,
     padToPowerOfTwo: false,
     extrudePixels: 0,
     maxTextureSize: 2048
