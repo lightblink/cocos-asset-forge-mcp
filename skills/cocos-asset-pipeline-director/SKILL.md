@@ -1,6 +1,6 @@
 ---
 name: cocos-asset-pipeline-director
-description: Plan, generate, adapt, validate, and import Cocos Creator 3.x game assets through a configured Cocos Asset Forge-compatible MCP. Use whenever the user asks for Cocos assets, sprites, sprite sheets, tilesets, UI packs, effects, placeholders, art bibles, Cocos-ready metadata, asset folders, bundle placement, or mobile/web runtime asset QA.
+description: Plan, generate, adapt, validate, and import Cocos Creator 3.x game assets through a configured Cocos Asset Forge-compatible MCP. Use whenever the user asks for Cocos assets, sprites, sprite sheets, tilesets, UI packs, effects, placeholders, audio, art bibles, Cocos-ready metadata, asset folders, bundle placement, from-zero playable slices, or mobile/web runtime asset QA.
 ---
 
 # Cocos Asset Pipeline Director
@@ -23,6 +23,9 @@ Expected MCP capabilities:
 - `asset_forge_generate_tileset`
 - `asset_forge_generate_ui_pack`
 - `asset_forge_adapt_image`
+- `asset_forge_generate_sfx`
+- `asset_forge_generate_music_loop`
+- `asset_forge_adapt_audio`
 
 If one of these tools is unavailable, use the closest available MCP tool and clearly report the gap. Only use generic image generation, file downloads, or hand-authored placeholder assets when the MCP cannot satisfy the request or the user explicitly asks for another path.
 
@@ -34,6 +37,7 @@ If one of these tools is unavailable, use the closest available MCP tool and cle
 2. Clarify the runtime job.
    - Identify whether the asset is a placeholder, production candidate, UI element, gameplay sprite, animation, tileset, effect, or imported external source.
    - Identify target platform constraints: mobile, web, mini-game, playable ad, desktop, or editor-only prototype.
+   - For a from-zero playable slice, define the minimum asset pack before implementation starts: gameplay placeholders, UI/HUD art, feedback/VFX cues, SFX, and optional short music loop. If the slice intentionally uses engine geometry only, record that as a deliberate prototype constraint instead of silently skipping the asset pipeline.
 3. Establish a compact art bible.
    - Capture camera/view, palette, outline style, rendering style, scale, silhouette rules, UI material, lighting, and negative prompts.
    - Reuse existing canonical assets when present instead of regenerating known characters or UI styles.
@@ -53,8 +57,24 @@ If one of these tools is unavailable, use the closest available MCP tool and cle
 | Terrain, modular map pieces, platform tiles, wall/floor/corner sets | `asset_forge_generate_tileset` | Specify tile size, tile count, and target camera scale. |
 | HUD, buttons, panels, meters, cursors, badges, inventory/shop icons | `asset_forge_generate_ui_pack` | Avoid accidental text unless text is explicitly part of the asset. |
 | User-provided or externally generated images | `asset_forge_adapt_image` | Use for alpha cleanup, trimming, padding, and Cocos-ready conversion. |
+| Clicks, drops, clears, hits, rewards, warnings, UI confirms, failure stingers | `asset_forge_generate_sfx` | Keep short, normalized, and mobile-safe. Prefer mono unless spatial feel matters. |
+| Menu loop, gameplay bed, tension loop, result music | `asset_forge_generate_music_loop` | Request loop-ready output with fade and stable mood. Keep early prototypes short. |
+| User-provided or externally sourced audio | `asset_forge_adapt_audio` | Use for format conversion, normalization, trimming, channel count, and loop prep. |
 
-Only use audio generation if an audio MCP tool is actually exposed in the active tool list. If config mentions audio but no callable audio tools are available, list audio as pending instead of claiming it was generated.
+Only use audio generation or adaptation if the matching audio MCP tool is actually exposed in the active tool list. If configuration mentions audio but no callable audio tools are available, list audio as pending instead of claiming it was generated.
+
+## From-Zero Slice Asset Minimum
+
+For a new playable local game, do not default to geometry-only visuals unless the user explicitly asks for a logic-only prototype or the asset MCP is unavailable. Prepare the smallest useful pack:
+
+- core gameplay sprites or placeholder tiles for player pieces, hazards, pickups, board cells, or equivalent interactables
+- minimal background or playfield frame when it improves readability
+- HUD/UI elements needed for score, pause, restart, result, and primary actions
+- immediate feedback VFX or sprite states for success, failure, hit, clear, reward, or invalid action
+- SFX for primary action, reward/progress, error/failure, and UI confirm when audio tools are available
+- a short optional music loop only after the first playable loop and UX are stable enough to judge mood
+
+If any class is skipped, report the reason as one of: not needed for this mechanic, intentionally deferred, MCP unavailable, provider failed, or user requested no assets.
 
 ## Prompt Contract
 
@@ -107,6 +127,7 @@ Before finalizing an asset task, verify the relevant gates and report any skippe
 - Animation frames keep stable proportions, facing direction, and readable action.
 - Tilesets have consistent tile dimensions and enough modular pieces for the requested map use.
 - UI packs are legible at mobile scale and do not contain accidental text.
+- Audio files import as Cocos-ready `AudioClip` candidates with appropriate format, sample rate, length, normalization, and loop handling.
 - Assets are atlas-friendly: controlled transparent whitespace, clean edges, and consistent sizing.
 - Names are stable and reflect role, subject, action, state, or variant.
 - Imported assets are placed in the correct Cocos folder and do not overwrite unrelated files.
