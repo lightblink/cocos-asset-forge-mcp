@@ -312,6 +312,9 @@ async function removeBackground(
   const key = chromaKey?.color ? hexToRgb(chromaKey.color) : sampleCornerColor(data, raw.info.width, raw.info.height, channels);
   const tolerance = chromaKey?.tolerance ?? 42;
   const mask = floodFillBackgroundMask(data, raw.info.width, raw.info.height, channels, key, tolerance);
+  if (isGreenKey(key)) {
+    removeConnectedGreenSpill(data, raw.info.width, raw.info.height, channels, mask);
+  }
   let removedPixels = 0;
 
   for (let pixel = 0; pixel < mask.length; pixel += 1) {
@@ -468,6 +471,42 @@ function floodFillBackgroundMask(
   }
 
   return mask;
+}
+
+function removeConnectedGreenSpill(
+  data: Buffer,
+  width: number,
+  height: number,
+  channels: number,
+  mask: Uint8Array
+): void {
+  const total = width * height;
+  const iterations = 4;
+  for (let pass = 0; pass < iterations; pass += 1) {
+    const additions: number[] = [];
+    for (let pixel = 0; pixel < total; pixel += 1) {
+      if (mask[pixel] === 1) continue;
+      if (!isDominantGreen(data, pixel * channels)) continue;
+      if (touchesMask(pixel, width, height, mask)) additions.push(pixel);
+    }
+    if (additions.length === 0) return;
+    for (const pixel of additions) mask[pixel] = 1;
+  }
+}
+
+function touchesMask(pixel: number, width: number, height: number, mask: Uint8Array): boolean {
+  const x = pixel % width;
+  const y = Math.floor(pixel / width);
+  return (
+    (x > 0 && mask[pixel - 1] === 1) ||
+    (x < width - 1 && mask[pixel + 1] === 1) ||
+    (y > 0 && mask[pixel - width] === 1) ||
+    (y < height - 1 && mask[pixel + width] === 1) ||
+    (x > 0 && y > 0 && mask[pixel - width - 1] === 1) ||
+    (x < width - 1 && y > 0 && mask[pixel - width + 1] === 1) ||
+    (x > 0 && y < height - 1 && mask[pixel + width - 1] === 1) ||
+    (x < width - 1 && y < height - 1 && mask[pixel + width + 1] === 1)
+  );
 }
 
 function isBackgroundLike(data: Buffer, offset: number, key: Rgb, tolerance: number): boolean {

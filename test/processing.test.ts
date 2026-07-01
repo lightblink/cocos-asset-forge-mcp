@@ -219,6 +219,67 @@ describe("asset processing pipeline", () => {
     }
   });
 
+  it("removes green spill connected to transparent background", async () => {
+    const dir = await tempDir();
+    try {
+      const source = await sharp({
+        create: {
+          width: 32,
+          height: 32,
+          channels: 4,
+          background: "#00ff00"
+        }
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 18,
+                height: 18,
+                channels: 4,
+                background: { r: 235, g: 137, b: 20, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 7,
+            top: 7
+          },
+          {
+            input: await sharp({
+              create: {
+                width: 2,
+                height: 8,
+                channels: 4,
+                background: { r: 20, g: 210, b: 20, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 7,
+            top: 12
+          }
+        ])
+        .png()
+        .toBuffer();
+
+      const adapted = await adaptImageBuffer(source, {
+        name: "green-spill",
+        outputDir: dir,
+        overwrite: true,
+        transparentBackground: true,
+        chromaKey: { color: "#00ff00", tolerance: 58 },
+        trimTransparentEdges: false,
+        padToPowerOfTwo: false,
+        extrudePixels: 0,
+        maxTextureSize: 256
+      });
+      const raw = await sharp(adapted.path).raw().toBuffer({ resolveWithObject: true });
+      const spillOffset = (16 * raw.info.width + 7) * raw.info.channels;
+      const subjectOffset = (16 * raw.info.width + 16) * raw.info.channels;
+      expect(raw.data[spillOffset + 3]).toBe(0);
+      expect(raw.data[subjectOffset + 3]).toBe(255);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("can delegate cutouts to a configured local command backend", async () => {
     const dir = await tempDir();
     try {
