@@ -102,6 +102,15 @@ export type TrimRect = {
 
 export type SpriteSheetInputFrame = string | Pick<AdaptedImage, "path" | "sourceWidth" | "sourceHeight" | "trim">;
 
+export type FrameVariationReport = {
+  pairCount: number;
+  averageDelta: number;
+  minDelta: number;
+  maxDelta: number;
+  tooSimilarPairs: number;
+  warnings: string[];
+};
+
 export type GridFrameBuffer = {
   index: number;
   row: number;
@@ -353,6 +362,55 @@ export async function splitGridImageToBuffers(
   return frames;
 }
 
+export async function analyzeFrameVariation(
+  framesInput: SpriteSheetInputFrame[],
+  options: {
+    sampleSize?: number;
+    minAverageDelta?: number;
+    minPairDelta?: number;
+  } = {}
+): Promise<FrameVariationReport> {
+  const sampleSize = options.sampleSize ?? 64;
+  const minAverageDelta = options.minAverageDelta ?? 0.035;
+  const minPairDelta = options.minPairDelta ?? 0.018;
+  if (framesInput.length < 2) {
+    return {
+      pairCount: 0,
+      averageDelta: 0,
+      minDelta: 0,
+      maxDelta: 0,
+      tooSimilarPairs: 0,
+      warnings: []
+    };
+  }
+
+  const normalizedFrames = await Promise.all(framesInput.map((frame) => normalizeFrameForVariation(frame, sampleSize)));
+  const deltas: number[] = [];
+  for (let index = 1; index < normalizedFrames.length; index += 1) {
+    deltas.push(frameDelta(normalizedFrames[index - 1], normalizedFrames[index]));
+  }
+
+  const averageDelta = deltas.reduce((sum, value) => sum + value, 0) / deltas.length;
+  const minDelta = Math.min(...deltas);
+  const maxDelta = Math.max(...deltas);
+  const tooSimilarPairs = deltas.filter((delta) => delta < minPairDelta).length;
+  const warnings: string[] = [];
+  if (averageDelta < minAverageDelta || tooSimilarPairs >= Math.ceil(deltas.length / 2)) {
+    warnings.push(
+      `Frame variation is low (averageDelta=${averageDelta.toFixed(3)}, minDelta=${minDelta.toFixed(3)}, tooSimilarPairs=${tooSimilarPairs}/${deltas.length}). The generated frames may read as a static pose rather than usable animation.`
+    );
+  }
+
+  return {
+    pairCount: deltas.length,
+    averageDelta,
+    minDelta,
+    maxDelta,
+    tooSimilarPairs,
+    warnings
+  };
+}
+
 async function removeBackground(
   image: sharp.Sharp,
   chromaKey?: { color?: string; tolerance: number }
@@ -574,6 +632,53 @@ async function normalizeSpriteSheetFrame(frame: SpriteSheetInputFrame): Promise<
     sourceHeight: packedHeight,
     hasTrimMetadata: false
   };
+}
+
+async function normalizeFrameForVariation(frame: SpriteSheetInputFrame, sampleSize: number): Promise<Buffer> {
+  const source = await normalizeSpriteSheetFrame(frame);
+  let image: sharp.Sharp;
+  if (source.hasTrimMetadata) {
+    const input = await sharp(source.path).ensureAlpha().png().toBuffer();
+    image = sharp({
+      create: {
+        width: Math.max(1, source.sourceWidth),
+        height: Math.max(1, source.sourceHeight),
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      }
+    }).composite([{ input, left: source.sourceX, top: source.sourceY }]);
+  } else {
+    image = sharp(source.path).ensureAlpha();
+  }
+
+  return image
+    .resize(sampleSize, sampleSize, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      kernel: sharp.kernel.nearest
+    })
+    .raw()
+    .toBuffer();
+}
+
+function frameDelta(a: Buffer, b: Buffer): number {
+  const length = Math.min(a.length, b.length);
+  if (length === 0) return 0;
+  let total = 0;
+  const pixels = Math.floor(length / 4);
+  for (let offset = 0; offset < pixels * 4; offset += 4) {
+    const alphaA = a[offset + 3] / 255;
+    const alphaB = b[offset + 3] / 255;
+    const alphaDelta = Math.abs(alphaA - alphaB);
+    const visibleWeight = Math.max(alphaA, alphaB);
+    const rgbDelta = (
+      Math.abs(a[offset] - b[offset]) +
+      Math.abs(a[offset + 1] - b[offset + 1]) +
+      Math.abs(a[offset + 2] - b[offset + 2])
+    ) / (255 * 3);
+    total += Math.max(alphaDelta, rgbDelta * visibleWeight);
+  }
+  return total / pixels;
 }
 
 async function extrudeTransparentBorder(image: sharp.Sharp, pixels: number): Promise<sharp.Sharp> {

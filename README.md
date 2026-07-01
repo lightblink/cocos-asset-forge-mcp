@@ -25,6 +25,7 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 - Local cutout pipeline: generated sprites use a flat `#00ff00` chroma-key background by default, then Asset Forge removes the connected background locally instead of trusting fake AI checkerboards.
 - Optional local segmentation backend: configure a command such as `rembg` for difficult existing images or automatic fallback when chroma-key removal is not enough.
 - Consistency-first animation workflow: generate a 3x3/4x3 contact sheet, slice it into frames, clean alpha, then repack it for Cocos.
+- Motion-readability QA: sprite sheet tools compare consecutive frames and warn when the model has produced near-duplicate static poses.
 - Provider abstraction: use mock providers offline, fal, Hugging Face, ModelScope, SiliconFlow, OpenAI-compatible endpoints, generic HTTP, or ComfyUI-style workflows.
 - Separate model intent for images, SFX, and music so game teams can choose the right model for each asset class.
 - MCP-native tool surface for coding agents, with JSON reports that include written files, warnings, Cocos import hints, and next steps.
@@ -220,6 +221,8 @@ fal audio example:
 
 Use `asset_forge_generate_sprite_grid_sheet` for characters, enemies, props with multiple states, and short animation cycles. It asks the image model for one fixed-grid contact sheet, then slices cells left-to-right and top-to-bottom. Because the model sees all poses in one composition, it usually preserves identity, costume, proportions, camera, and palette better than independent frame generation.
 
+The grid prompt includes action-specific pose progressions for common motions such as run, walk, idle, jump, attack, and death. After slicing, Asset Forge compares consecutive frames and reports a low-variation warning if the sheet looks like repeated static artwork. Treat that warning as a failed animation candidate and regenerate with stronger motion language, a better reference sheet, or a model that follows contact-sheet instructions more reliably.
+
 Use `asset_forge_generate_sprite_sheet` only when the provider cannot produce clean contact sheets, or when each frame needs a very different prompt. Use `asset_forge_generate_sprite` for standalone assets and placeholders.
 
 For transparent sprites, Asset Forge defaults to a chroma-key workflow: it asks the model for a flat `#00ff00` background, then removes only the key-colored region connected to the image border. This produces real alpha PNGs and avoids treating AI-drawn checkerboards as transparency.
@@ -287,7 +290,7 @@ npm run build
 - Provider packages for Replicate, Fal, Stability, ElevenLabs, Suno-like services, and local models.
 - Texture extrusion that duplicates edge pixels instead of transparent padding.
 - Tiled `.tsx` generation and optional `.tmx` starter maps.
-- Visual QA reports for sprite sheet frame consistency.
+- Rich visual QA reports for sprite sheet frame consistency and pose progression.
 
 ## References
 

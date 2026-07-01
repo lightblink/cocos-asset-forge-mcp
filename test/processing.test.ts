@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { MockAudioProvider, MockImageProvider } from "../src/generation/mock.js";
 import { adaptAudioBuffer } from "../src/processing/audio.js";
-import { adaptImageBuffer, makeSpriteSheet, splitGridImageToBuffers } from "../src/processing/image.js";
+import { adaptImageBuffer, analyzeFrameVariation, makeSpriteSheet, splitGridImageToBuffers } from "../src/processing/image.js";
 
 describe("asset processing pipeline", () => {
   it("adapts generated images into Cocos-ready PNGs", async () => {
@@ -196,6 +196,91 @@ describe("asset processing pipeline", () => {
       expect(plist).toContain("<key>spriteOffset</key><string>{-1,-1}</string>");
       expect(plist).toContain("<key>spriteSize</key><string>{10,12}</string>");
       expect(plist).toContain("<key>spriteSourceSize</key><string>{32,32}</string>");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when animation frames have too little visual motion", async () => {
+    const dir = await tempDir();
+    try {
+      const framePaths: string[] = [];
+      const source = await sharp({
+        create: {
+          width: 32,
+          height: 32,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        }
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 10,
+                height: 12,
+                channels: 4,
+                background: { r: 230, g: 80, b: 40, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 11,
+            top: 10
+          }
+        ])
+        .png()
+        .toBuffer();
+
+      for (let index = 0; index < 4; index += 1) {
+        const path = join(dir, `idle-copy-${index}.png`);
+        await sharp(source).png().toFile(path);
+        framePaths.push(path);
+      }
+
+      const report = await analyzeFrameVariation(framePaths);
+      expect(report.averageDelta).toBe(0);
+      expect(report.tooSimilarPairs).toBe(3);
+      expect(report.warnings[0]).toContain("Frame variation is low");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("passes frame variation QA when silhouettes move across frames", async () => {
+    const dir = await tempDir();
+    try {
+      const framePaths: string[] = [];
+      for (let index = 0; index < 4; index += 1) {
+        const path = join(dir, `run-${index}.png`);
+        await sharp({
+          create: {
+            width: 32,
+            height: 32,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 }
+          }
+        })
+          .composite([
+            {
+              input: await sharp({
+                create: {
+                  width: 10 + index,
+                  height: 12,
+                  channels: 4,
+                  background: { r: 40, g: 80, b: 230, alpha: 1 }
+                }
+              }).png().toBuffer(),
+              left: 6 + index * 3,
+              top: 10
+            }
+          ])
+          .png()
+          .toFile(path);
+        framePaths.push(path);
+      }
+
+      const report = await analyzeFrameVariation(framePaths);
+      expect(report.averageDelta).toBeGreaterThan(0.035);
+      expect(report.warnings).toHaveLength(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

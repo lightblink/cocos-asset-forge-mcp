@@ -5,7 +5,7 @@ import type { ForgeConfig } from "../config/schema.js";
 import { redactConfig } from "../config/load.js";
 import type { AudioProvider, ImageProvider } from "../generation/types.js";
 import { adaptAudioBuffer } from "../processing/audio.js";
-import { adaptImageBuffer, makeSpriteSheet, splitGridImageToBuffers } from "../processing/image.js";
+import { adaptImageBuffer, analyzeFrameVariation, makeSpriteSheet, splitGridImageToBuffers } from "../processing/image.js";
 import type { AdaptedImage } from "../processing/image.js";
 import type { AssetReport } from "../schemas/common.js";
 import { slugify, withTimestamp } from "../utils/fs.js";
@@ -125,6 +125,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       adaptedFrames.push(adapted);
       warnings.push(...adapted.warnings);
     }
+    const variation = await analyzeFrameVariation(adaptedFrames);
+    warnings.push(...variation.warnings);
 
     const sheet = await makeSpriteSheet(adaptedFrames, {
       name: `${baseName}-${slugify(input.action)}`,
@@ -226,6 +228,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       adaptedFrames.push(adapted);
       warnings.push(...adapted.warnings);
     }
+    const variation = await analyzeFrameVariation(adaptedFrames);
+    warnings.push(...variation.warnings);
 
     const sheet = await makeSpriteSheet(adaptedFrames, {
       name: `${baseName}-${slugify(input.action)}-grid`,
@@ -245,7 +249,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       manifest: sheet.manifestPath,
       warnings: [
         ...warnings,
-        "Grid contact sheets improve consistency, but frame boundaries should still be visually checked before final animation timing."
+        `Frame variation QA: averageDelta=${variation.averageDelta.toFixed(3)}, minDelta=${variation.minDelta.toFixed(3)}, maxDelta=${variation.maxDelta.toFixed(3)}.`,
+        "Grid contact sheets improve consistency, but frame boundaries and motion readability should still be visually checked before final animation timing."
       ],
       importPath: cocosImportPath(context.config, sheet.imagePath),
       recommendedType: "SpriteAtlas + AnimationClip",
@@ -604,16 +609,44 @@ function buildGridPrompt(input: {
     : input.background === "transparent"
       ? "transparent background inside every cell"
       : "plain white background inside every cell";
+  const motionGuide = motionGuideForAction(input.action, input.frameCount);
   return [
     input.prompt,
-    `Create a single ${input.columns} columns by ${input.rows} rows contact sheet for the action/state set "${input.action}".`,
+    `Create a single ${input.columns} columns by ${input.rows} rows contact sheet for the animation action "${input.action}".`,
     `Exactly ${input.frameCount} usable frames, each frame centered in a ${input.frameWidth}x${input.frameHeight} cell.`,
     "Keep the same character identity, costume, proportions, camera angle, scale, lighting, outline weight, and color palette in every cell.",
+    "Every cell must show a distinct animation key pose, not duplicated static artwork.",
+    "Change limb positions, body squash/stretch, silhouette, held-item position, cloth/hair secondary motion, and contact points across frames while preserving identity.",
+    motionGuide,
+    "For looping actions, make the final frame lead naturally back into frame 1 without copying frame 1 exactly.",
     "No grid lines, no labels, no text, no numbers, no watermark, no cropping, no merged cells.",
     "Leave comfortable empty space around the subject in each cell for clean slicing.",
     `Use ${background}.`,
     "Order frames left to right, top to bottom."
   ].join("\n");
+}
+
+function motionGuideForAction(action: string, frameCount: number): string {
+  const normalized = action.toLowerCase();
+  if (/(run|running|sprint|dash)/.test(normalized)) {
+    return `Pose progression for ${frameCount} frames: contact, down, passing, up, opposite contact, opposite down, opposite passing, opposite up; show clear alternating legs and arms.`;
+  }
+  if (/(walk|walking)/.test(normalized)) {
+    return `Pose progression for ${frameCount} frames: contact, recoil/down, passing, high point, opposite contact, opposite recoil, opposite passing, opposite high point; keep the stride readable.`;
+  }
+  if (/(idle|breath|stand)/.test(normalized)) {
+    return `Pose progression for ${frameCount} frames: subtle but visible breathing loop with head, shoulders, hands, clothing, and hair shifting over time; no two adjacent frames identical.`;
+  }
+  if (/(jump|leap)/.test(normalized)) {
+    return `Pose progression for ${frameCount} frames: crouch anticipation, launch, rising, apex, falling, landing anticipation, impact, recover.`;
+  }
+  if (/(attack|slash|hit|shoot|cast)/.test(normalized)) {
+    return `Pose progression for ${frameCount} frames: anticipation, wind-up, action smear/contact, follow-through, recoil, settle; make the silhouette change strongly.`;
+  }
+  if (/(death|die|ko|fall)/.test(normalized)) {
+    return `Pose progression for ${frameCount} frames: hit reaction, stagger, falling, impact, collapse, settle; each frame should advance the action.`;
+  }
+  return `Pose progression for ${frameCount} frames: clear beginning, anticipation, main action, follow-through, recovery, and loop/settle poses; no adjacent frames should be visually identical.`;
 }
 
 function withDefaultChromaKey<T extends {
