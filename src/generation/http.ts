@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 import type { ProviderConfig } from "../config/schema.js";
 import { resolveApiKey } from "./auth.js";
+import { buildImageAssetPrompt } from "./prompt.js";
 
 export class OpenAICompatibleImageProvider implements ImageProvider {
   readonly config: ProviderConfig;
@@ -67,13 +68,15 @@ export class GenericHttpImageProvider implements ImageProvider {
 
   async generateImage(request: ImageGenerationRequest): Promise<BinaryAsset> {
     return postGenericBinary(this.config, {
-      prompt: request.prompt,
+      prompt: buildImagePrompt(request),
       negative_prompt: request.negativePrompt,
       width: request.width,
       height: request.height,
       style: request.style,
       seed: request.seed,
-      transparent_background: request.transparentBackground
+      transparent_background: request.background === "transparent" || request.transparentBackground,
+      background: request.background,
+      chroma_key_color: request.chromaKeyColor
     }, "image/png", "png", request.prompt);
   }
 }
@@ -159,14 +162,7 @@ async function postGenericBinary(
 }
 
 function buildImagePrompt(request: ImageGenerationRequest): string {
-  return [
-    request.prompt,
-    request.style ? `Style: ${request.style}.` : undefined,
-    request.transparentBackground ? "Transparent background, isolated game asset, clean alpha edges." : undefined,
-    request.negativePrompt ? `Avoid: ${request.negativePrompt}.` : undefined
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return buildImageAssetPrompt(request, "game asset");
 }
 
 function assertUrl(value: string | undefined): string {

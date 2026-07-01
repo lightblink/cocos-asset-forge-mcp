@@ -18,6 +18,8 @@ export type ImageGenerationRequest = {
   style?: string;
   seed?: string | number;
   transparentBackground?: boolean;
+  background?: "transparent" | "chroma_key" | "none";
+  chromaKeyColor?: string;
   referenceImagePath?: string;
   referenceImageUrl?: string;
   referenceStrength?: number;

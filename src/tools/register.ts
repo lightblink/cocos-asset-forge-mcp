@@ -30,6 +30,9 @@ type ToolContext = {
   musicProvider: AudioProvider;
 };
 
+const DEFAULT_KEY_COLOR = "#00ff00";
+const DEFAULT_KEY_TOLERANCE = 58;
+
 export function registerAssetTools(server: McpServer, context: ToolContext): void {
   server.registerTool("asset_forge_get_config", {
     title: "Get Asset Forge Config",
@@ -58,6 +61,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       style: input.style,
       seed: input.seed,
       transparentBackground: input.postprocess.transparentBackground,
+      background: input.postprocess.transparentBackground ? "chroma_key" : "none",
+      chromaKeyColor: DEFAULT_KEY_COLOR,
       referenceImagePath: input.referenceImagePath,
       referenceImageUrl: input.referenceImageUrl,
       referenceStrength: input.referenceStrength
@@ -66,7 +71,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       name,
       outputDir,
       overwrite: context.config.safety.overwrite,
-      ...input.postprocess
+      ...withDefaultChromaKey(input.postprocess)
     });
     return textResult(makeReport({
       id: name,
@@ -99,6 +104,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         style: input.style,
         seed: input.seed ? `${input.seed}-${index}` : undefined,
         transparentBackground: input.postprocess.transparentBackground,
+        background: input.postprocess.transparentBackground ? "chroma_key" : "none",
+        chromaKeyColor: DEFAULT_KEY_COLOR,
         referenceImagePath: input.referenceImagePath,
         referenceImageUrl: input.referenceImageUrl,
         referenceStrength: input.referenceStrength
@@ -107,7 +114,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         name: `${baseName}-${input.action}-${String(index + 1).padStart(3, "0")}`,
         outputDir: framesDir,
         overwrite: context.config.safety.overwrite,
-        ...input.postprocess
+        ...withDefaultChromaKey(input.postprocess)
       });
       framePaths.push(adapted.path);
     }
@@ -151,7 +158,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
     const frameCount = input.frameCount ?? input.rows * input.columns;
     const sheetWidth = input.columns * input.frameSize.width;
     const sheetHeight = input.rows * input.frameSize.height;
-    const keyColor = input.contactSheetBackground === "flat_key_color" ? "#00ff00" : undefined;
+    const keyColor = input.contactSheetBackground === "flat_key_color" ? DEFAULT_KEY_COLOR : undefined;
     const generated = await context.imageProvider.generateImage({
       prompt: buildGridPrompt({
         prompt: input.prompt,
@@ -168,6 +175,12 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       style: input.style,
       seed: input.seed,
       transparentBackground: input.contactSheetBackground === "transparent",
+      background: input.contactSheetBackground === "flat_key_color"
+        ? "chroma_key"
+        : input.contactSheetBackground === "transparent"
+          ? "transparent"
+          : "none",
+      chromaKeyColor: keyColor,
       referenceImagePath: input.referenceImagePath,
       referenceImageUrl: input.referenceImageUrl,
       referenceStrength: input.referenceStrength
@@ -194,9 +207,9 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         name: `${baseName}-${slugify(input.action)}-${String(frame.index + 1).padStart(3, "0")}`,
         outputDir: framesDir,
         overwrite: context.config.safety.overwrite,
-        ...input.postprocess,
+        ...withDefaultChromaKey(input.postprocess),
         chromaKey: keyColor
-          ? { color: keyColor, tolerance: input.postprocess.chromaKey?.tolerance ?? 42 }
+          ? { color: keyColor, tolerance: input.postprocess.chromaKey?.tolerance ?? DEFAULT_KEY_TOLERANCE }
           : input.postprocess.chromaKey
       });
       framePaths.push(adapted.path);
@@ -249,13 +262,15 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         height: input.tileSize.height,
         style: input.style,
         seed: input.seed ? `${input.seed}-${index}` : undefined,
-        transparentBackground: input.postprocess.transparentBackground
+        transparentBackground: input.postprocess.transparentBackground,
+        background: input.postprocess.transparentBackground ? "chroma_key" : "none",
+        chromaKeyColor: DEFAULT_KEY_COLOR
       });
       const adapted = await adaptImageBuffer(generated.bytes, {
         name: `${baseName}-tile-${String(index + 1).padStart(3, "0")}`,
         outputDir: tilesDir,
         overwrite: context.config.safety.overwrite,
-        ...input.postprocess
+        ...withDefaultChromaKey(input.postprocess)
       });
       tilePaths.push(adapted.path);
     }
@@ -296,18 +311,20 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
     const warnings: string[] = [];
     for (const element of input.elements) {
       const generated = await context.imageProvider.generateImage({
-        prompt: `${input.prompt}\nUI element: ${element}. Cocos Creator game UI asset, transparent background, no text unless explicitly requested.`,
+        prompt: `${input.prompt}\nUI element: ${element}. Cocos Creator game UI asset, isolated on a flat chroma key background, no text unless explicitly requested.`,
         width: input.elementSize.width,
         height: input.elementSize.height,
         style: input.style,
         seed: input.seed ? `${input.seed}-${element}` : undefined,
-        transparentBackground: input.postprocess.transparentBackground
+        transparentBackground: input.postprocess.transparentBackground,
+        background: input.postprocess.transparentBackground ? "chroma_key" : "none",
+        chromaKeyColor: DEFAULT_KEY_COLOR
       });
       const adapted = await adaptImageBuffer(generated.bytes, {
         name: `${baseName}-${slugify(element)}`,
         outputDir,
         overwrite: context.config.safety.overwrite,
-        ...input.postprocess
+        ...withDefaultChromaKey(input.postprocess)
       });
       files.push(adapted.path);
       warnings.push(...adapted.warnings);
@@ -526,14 +543,14 @@ function recommendationsFor(type: string, style: string) {
   switch (type) {
     case "sprites":
       return [
-        { tool: "asset_forge_generate_sprite", name: "player", promptHint: `main controllable character, ${style}, transparent background` },
-        { tool: "asset_forge_generate_sprite", name: "enemy-basic", promptHint: `basic enemy readable silhouette, ${style}, transparent background` },
+        { tool: "asset_forge_generate_sprite", name: "player", promptHint: `main controllable character, ${style}, flat chroma key background` },
+        { tool: "asset_forge_generate_sprite", name: "enemy-basic", promptHint: `basic enemy readable silhouette, ${style}, flat chroma key background` },
         { tool: "asset_forge_generate_sprite", name: "pickup", promptHint: `collectible reward item, high readability, ${style}` }
       ];
     case "sprite_sheets":
       return [
         { tool: "asset_forge_generate_sprite_grid_sheet", name: "player-run", promptHint: `3x3 or 4x3 player run contact sheet, consistent proportions, ${style}` },
-        { tool: "asset_forge_generate_sprite_grid_sheet", name: "impact", promptHint: `3x3 short hit impact contact sheet, transparent or key-color background, ${style}` },
+        { tool: "asset_forge_generate_sprite_grid_sheet", name: "impact", promptHint: `3x3 short hit impact contact sheet, key-color background, ${style}` },
         { tool: "asset_forge_generate_sprite_sheet", name: "fallback-frame-by-frame", promptHint: `use only when a provider cannot produce reliable contact sheets, ${style}` }
       ];
     case "tilesets":
@@ -569,7 +586,7 @@ function buildGridPrompt(input: {
   background: "transparent" | "flat_key_color" | "white";
 }): string {
   const background = input.background === "flat_key_color"
-    ? "pure #00ff00 chroma key background inside every cell"
+    ? "pure #00ff00 chroma key background inside every cell, no checkerboard, no texture, no shadow"
     : input.background === "transparent"
       ? "transparent background inside every cell"
       : "plain white background inside every cell";
@@ -583,4 +600,18 @@ function buildGridPrompt(input: {
     `Use ${background}.`,
     "Order frames left to right, top to bottom."
   ].join("\n");
+}
+
+function withDefaultChromaKey<T extends {
+  transparentBackground: boolean;
+  chromaKey?: { color?: string; tolerance: number };
+}>(postprocess: T): T {
+  if (!postprocess.transparentBackground || postprocess.chromaKey?.color) return postprocess;
+  return {
+    ...postprocess,
+    chromaKey: {
+      color: DEFAULT_KEY_COLOR,
+      tolerance: postprocess.chromaKey?.tolerance ?? DEFAULT_KEY_TOLERANCE
+    }
+  };
 }

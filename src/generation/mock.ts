@@ -17,9 +17,14 @@ export class MockImageProvider implements ImageProvider {
 
   async generateImage(request: ImageGenerationRequest): Promise<BinaryAsset> {
     const palette = paletteFromText(`${request.prompt}:${request.seed ?? ""}`);
+    const background = request.background === "chroma_key"
+      ? request.chromaKeyColor ?? "#00ff00"
+      : request.transparentBackground || request.background === "transparent"
+        ? "transparent"
+        : palette.bg;
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${request.width}" height="${request.height}" viewBox="0 0 ${request.width} ${request.height}">
-        <rect width="100%" height="100%" fill="${request.transparentBackground ? "transparent" : palette.bg}"/>
+        <rect width="100%" height="100%" fill="${background}"/>
         <circle cx="${request.width * 0.5}" cy="${request.height * 0.5}" r="${Math.min(request.width, request.height) * 0.32}" fill="${palette.primary}"/>
         <rect x="${request.width * 0.2}" y="${request.height * 0.58}" width="${request.width * 0.6}" height="${request.height * 0.18}" rx="${request.width * 0.04}" fill="${palette.secondary}"/>
         <path d="M ${request.width * 0.5} ${request.height * 0.16} L ${request.width * 0.67} ${request.height * 0.5} L ${request.width * 0.33} ${request.height * 0.5} Z" fill="${palette.accent}"/>

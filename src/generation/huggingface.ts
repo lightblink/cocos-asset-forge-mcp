@@ -1,5 +1,6 @@
 import type { ProviderConfig } from "../config/schema.js";
 import { resolveApiKey } from "./auth.js";
+import { buildImageAssetPrompt } from "./prompt.js";
 import type { BinaryAsset, ImageGenerationRequest, ImageProvider } from "./types.js";
 
 export class HuggingFaceImageProvider implements ImageProvider {
@@ -54,14 +55,7 @@ export class HuggingFaceImageProvider implements ImageProvider {
 }
 
 function buildPrompt(request: ImageGenerationRequest): string {
-  return [
-    request.prompt,
-    request.style ? `Style: ${request.style}.` : undefined,
-    request.transparentBackground ? "Transparent background, isolated game sprite, clean silhouette, no text, no watermark." : undefined,
-    request.negativePrompt ? `Avoid: ${request.negativePrompt}.` : undefined
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return buildImageAssetPrompt(request, "game sprite");
 }
 
 function parametersFromTemplate(template: Record<string, unknown>): Record<string, unknown> {

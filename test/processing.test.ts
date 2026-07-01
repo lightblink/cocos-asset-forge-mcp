@@ -105,6 +105,71 @@ describe("asset processing pipeline", () => {
     expect(frames[4]).toMatchObject({ row: 1, column: 1, width: 32, height: 32 });
   });
 
+  it("removes connected chroma-key backgrounds while preserving isolated subject pixels", async () => {
+    const dir = await tempDir();
+    try {
+      const source = await sharp({
+        create: {
+          width: 32,
+          height: 32,
+          channels: 4,
+          background: "#00ff00"
+        }
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 16,
+                height: 16,
+                channels: 4,
+                background: { r: 20, g: 40, b: 180, alpha: 1 }
+              }
+            })
+              .composite([
+                {
+                  input: await sharp({
+                    create: {
+                      width: 4,
+                      height: 4,
+                      channels: 4,
+                      background: "#00ee00"
+                    }
+                  }).png().toBuffer(),
+                  left: 6,
+                  top: 6
+                }
+              ])
+              .png()
+              .toBuffer(),
+            left: 8,
+            top: 8
+          }
+        ])
+        .png()
+        .toBuffer();
+
+      const adapted = await adaptImageBuffer(source, {
+        name: "keyed",
+        outputDir: dir,
+        overwrite: true,
+        transparentBackground: true,
+        chromaKey: { color: "#00ff00", tolerance: 58 },
+        trimTransparentEdges: false,
+        padToPowerOfTwo: false,
+        extrudePixels: 0,
+        maxTextureSize: 256
+      });
+      const raw = await sharp(adapted.path).raw().toBuffer({ resolveWithObject: true });
+      const cornerAlpha = raw.data[3];
+      const innerGreenOffset = (16 * raw.info.width + 16) * raw.info.channels;
+      expect(cornerAlpha).toBe(0);
+      expect(raw.data[innerGreenOffset + 3]).toBe(255);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("adapts generated audio into a Cocos AudioClip file", async () => {
     const dir = await tempDir();
     try {

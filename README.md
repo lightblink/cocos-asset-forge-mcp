@@ -21,7 +21,8 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 
 ## Highlights
 
-- Cocos-ready output: transparent PNGs, frame manifests, `.plist` atlas metadata, and AudioClip-friendly WAV/MP3/OGG files.
+- Cocos-ready output: real RGBA transparent PNGs, frame manifests, `.plist` atlas metadata, and AudioClip-friendly WAV/MP3/OGG files.
+- Local cutout pipeline: generated sprites use a flat `#00ff00` chroma-key background by default, then Asset Forge removes the connected background locally instead of trusting fake AI checkerboards.
 - Consistency-first animation workflow: generate a 3x3/4x3 contact sheet, slice it into frames, clean alpha, then repack it for Cocos.
 - Provider abstraction: use mock providers offline, fal, Hugging Face, ModelScope, SiliconFlow, OpenAI-compatible endpoints, generic HTTP, or ComfyUI-style workflows.
 - Separate model intent for images, SFX, and music so game teams can choose the right model for each asset class.
@@ -31,7 +32,7 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 
 AI asset generation is useful, but raw model output is not a complete game asset pipeline:
 
-- Sprites need clean alpha, stable dimensions, predictable names, and importable PNG files.
+- Sprites need real alpha, not a drawn checkerboard, plus stable dimensions, predictable names, and importable PNG files.
 - Animation frames need stable ordering, fixed cell sizes, packed sheets, and frame coordinate metadata.
 - Character consistency often benefits from one 3x3/4x3 contact sheet that is sliced into frames, rather than independent per-frame generations.
 - Tiles need grid packing and map-editor-friendly metadata.
@@ -218,6 +219,8 @@ fal audio example:
 Use `asset_forge_generate_sprite_grid_sheet` for characters, enemies, props with multiple states, and short animation cycles. It asks the image model for one fixed-grid contact sheet, then slices cells left-to-right and top-to-bottom. Because the model sees all poses in one composition, it usually preserves identity, costume, proportions, camera, and palette better than independent frame generation.
 
 Use `asset_forge_generate_sprite_sheet` only when the provider cannot produce clean contact sheets, or when each frame needs a very different prompt. Use `asset_forge_generate_sprite` for standalone assets and placeholders.
+
+For transparent sprites, Asset Forge defaults to a chroma-key workflow: it asks the model for a flat `#00ff00` background, then removes only the key-colored region connected to the image border. This produces real alpha PNGs and avoids treating AI-drawn checkerboards as transparency.
 
 For reference-image workflows, pass `referenceImagePath` or `referenceImageUrl` and configure `imageProvider.model` to an edit/image-to-image capable fal model. Text-to-image models are intentionally rejected when a reference image is supplied, so the calling agent gets a clear failure instead of silently losing consistency.
 

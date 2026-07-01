@@ -22,6 +22,15 @@ export type AdaptedImage = {
   warnings: string[];
 };
 
+type Rgb = { r: number; g: number; b: number };
+
+type RemoveBackgroundResult = {
+  image: sharp.Sharp;
+  removedPixels: number;
+  totalPixels: number;
+  key: Rgb;
+};
+
 export type SpriteSheetOptions = {
   name: string;
   outputDir: string;
@@ -63,7 +72,18 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
   let image = sharp(buffer, { animated: false }).ensureAlpha();
 
   if (options.transparentBackground) {
-    image = await removeBackground(image, options.chromaKey);
+    const removed = await removeBackground(image, options.chromaKey);
+    image = removed.image;
+    const removedRatio = removed.totalPixels > 0 ? removed.removedPixels / removed.totalPixels : 0;
+    if (removedRatio < 0.01) {
+      warnings.push(
+        `Background removal removed only ${(removedRatio * 100).toFixed(1)}% of pixels. The model may not have used a flat key background.`
+      );
+    } else if (removedRatio > 0.92) {
+      warnings.push(
+        `Background removal removed ${(removedRatio * 100).toFixed(1)}% of pixels. Check that the subject was not too close to the key color.`
+      );
+    }
   }
 
   if (options.trimTransparentEdges) {
@@ -253,31 +273,34 @@ export async function splitGridImageToBuffers(
 async function removeBackground(
   image: sharp.Sharp,
   chromaKey?: { color?: string; tolerance: number }
-): Promise<sharp.Sharp> {
+): Promise<RemoveBackgroundResult> {
   const raw = await image.raw().toBuffer({ resolveWithObject: true });
   const channels = raw.info.channels;
   const data = Buffer.from(raw.data);
   const key = chromaKey?.color ? hexToRgb(chromaKey.color) : sampleCornerColor(data, raw.info.width, raw.info.height, channels);
-  const tolerance = chromaKey?.tolerance ?? 28;
+  const tolerance = chromaKey?.tolerance ?? 42;
+  const mask = floodFillBackgroundMask(data, raw.info.width, raw.info.height, channels, key, tolerance);
+  let removedPixels = 0;
 
-  for (let i = 0; i < data.length; i += channels) {
-    const distance = Math.sqrt(
-      (data[i] - key.r) ** 2 +
-      (data[i + 1] - key.g) ** 2 +
-      (data[i + 2] - key.b) ** 2
-    );
-    if (distance <= tolerance) {
-      data[i + 3] = 0;
+  for (let pixel = 0; pixel < mask.length; pixel += 1) {
+    if (mask[pixel] === 1) {
+      data[pixel * channels + 3] = 0;
+      removedPixels += 1;
     }
   }
 
-  return sharp(data, {
-    raw: {
-      width: raw.info.width,
-      height: raw.info.height,
-      channels
-    }
-  });
+  return {
+    image: sharp(data, {
+      raw: {
+        width: raw.info.width,
+        height: raw.info.height,
+        channels
+      }
+    }),
+    removedPixels,
+    totalPixels: raw.info.width * raw.info.height,
+    key
+  };
 }
 
 async function extrudeTransparentBorder(image: sharp.Sharp, pixels: number): Promise<sharp.Sharp> {
@@ -308,7 +331,65 @@ async function padToPowerOfTwo(image: sharp.Sharp): Promise<sharp.Sharp> {
   }).composite([{ input: buffer, left: 0, top: 0 }]);
 }
 
-function sampleCornerColor(data: Buffer, width: number, height: number, channels: number): { r: number; g: number; b: number } {
+function floodFillBackgroundMask(
+  data: Buffer,
+  width: number,
+  height: number,
+  channels: number,
+  key: Rgb,
+  tolerance: number
+): Uint8Array {
+  const total = width * height;
+  const mask = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  let head = 0;
+  let tail = 0;
+
+  function enqueue(pixel: number): void {
+    if (pixel < 0 || pixel >= total || mask[pixel] === 1) return;
+    if (!isBackgroundLike(data, pixel * channels, key, tolerance)) return;
+    mask[pixel] = 1;
+    queue[tail] = pixel;
+    tail += 1;
+  }
+
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x);
+    enqueue((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += 1) {
+    enqueue(y * width);
+    enqueue(y * width + width - 1);
+  }
+
+  while (head < tail) {
+    const pixel = queue[head];
+    head += 1;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    if (x > 0) enqueue(pixel - 1);
+    if (x < width - 1) enqueue(pixel + 1);
+    if (y > 0) enqueue(pixel - width);
+    if (y < height - 1) enqueue(pixel + width);
+  }
+
+  return mask;
+}
+
+function isBackgroundLike(data: Buffer, offset: number, key: Rgb, tolerance: number): boolean {
+  if (data[offset + 3] <= 8) return true;
+  return colorDistance(data, offset, key) <= tolerance;
+}
+
+function colorDistance(data: Buffer, offset: number, key: Rgb): number {
+  return Math.sqrt(
+    (data[offset] - key.r) ** 2 +
+    (data[offset + 1] - key.g) ** 2 +
+    (data[offset + 2] - key.b) ** 2
+  );
+}
+
+function sampleCornerColor(data: Buffer, width: number, height: number, channels: number): Rgb {
   const indexes = [0, width - 1, (height - 1) * width, height * width - 1].map((pixel) => pixel * channels);
   const sum = indexes.reduce(
     (acc, index) => ({
@@ -325,7 +406,7 @@ function sampleCornerColor(data: Buffer, width: number, height: number, channels
   };
 }
 
-function hexToRgb(value: string): { r: number; g: number; b: number } {
+function hexToRgb(value: string): Rgb {
   return {
     r: Number.parseInt(value.slice(1, 3), 16),
     g: Number.parseInt(value.slice(3, 5), 16),
