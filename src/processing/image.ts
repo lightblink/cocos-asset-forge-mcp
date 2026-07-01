@@ -90,7 +90,7 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
   if (options.transparentBackground) {
     if (shouldRunLocalCommandFirst(options.cutout)) {
       const local = await runLocalCommandCutout(await image.clone().png().toBuffer(), options.cutout);
-      image = sharp(local.bytes, { animated: false }).ensureAlpha();
+      image = await cleanLocalCutoutOutput(local.bytes, options.chromaKey);
       warnings.push(...local.warnings);
     } else {
       const sourceForFallback = await image.clone().png().toBuffer();
@@ -109,7 +109,7 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
 
       if (shouldFallbackToLocalCommand(options.cutout, removedRatio)) {
         const local = await runLocalCommandCutout(sourceForFallback, options.cutout);
-        image = sharp(local.bytes, { animated: false }).ensureAlpha();
+        image = await cleanLocalCutoutOutput(local.bytes, options.chromaKey);
         warnings.push(
           `Chroma-key removal removed only ${(removedRatio * 100).toFixed(1)}% of pixels, so local segmentation backend was used.`
         );
@@ -370,6 +370,39 @@ async function runLocalCommandCutout(
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+async function cleanLocalCutoutOutput(
+  bytes: Buffer,
+  chromaKey?: { color?: string; tolerance: number }
+): Promise<sharp.Sharp> {
+  const image = sharp(bytes, { animated: false }).ensureAlpha();
+  if (!chromaKey?.color) return image;
+  return removeChromaResidue((await removeBackground(image, chromaKey)).image, chromaKey);
+}
+
+async function removeChromaResidue(
+  image: sharp.Sharp,
+  chromaKey: { color?: string; tolerance: number }
+): Promise<sharp.Sharp> {
+  if (!chromaKey.color) return image;
+  const key = hexToRgb(chromaKey.color);
+  const raw = await image.raw().toBuffer({ resolveWithObject: true });
+  const data = Buffer.from(raw.data);
+  const channels = raw.info.channels;
+  for (let i = 0; i < data.length; i += channels) {
+    if (data[i + 3] <= 8) continue;
+    if (colorDistance(data, i, key) <= chromaKey.tolerance || (isGreenKey(key) && isDominantGreen(data, i))) {
+      data[i + 3] = 0;
+    }
+  }
+  return sharp(data, {
+    raw: {
+      width: raw.info.width,
+      height: raw.info.height,
+      channels
+    }
+  });
 }
 
 async function runCommand(command: string, args: string[], timeoutMs: number): Promise<void> {

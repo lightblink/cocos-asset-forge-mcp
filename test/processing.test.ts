@@ -288,16 +288,40 @@ describe("asset processing pipeline", () => {
           width: 16,
           height: 16,
           channels: 4,
-          background: { r: 20, g: 40, b: 180, alpha: 1 }
+          background: "#00ff00"
         }
-      }).png().toBuffer();
+      })
+        .composite([
+          {
+            input: await sharp({
+              create: {
+                width: 8,
+                height: 8,
+                channels: 4,
+                background: { r: 20, g: 40, b: 180, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 4,
+            top: 4
+          },
+          {
+            input: await sharp({
+              create: {
+                width: 2,
+                height: 2,
+                channels: 4,
+                background: { r: 20, g: 210, b: 20, alpha: 1 }
+              }
+            }).png().toBuffer(),
+            left: 7,
+            top: 7
+          }
+        ])
+        .png()
+        .toBuffer();
       const script = [
         "const fs=require('fs');",
-        "const sharp=require('sharp');",
-        "sharp(fs.readFileSync(process.argv[1])).ensureAlpha().composite([{",
-        "input: { create: { width: 16, height: 16, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } },",
-        "blend: 'dest-in'",
-        "}]).png().toFile(process.argv[2]);"
+        "fs.copyFileSync(process.argv[1], process.argv[2]);"
       ].join("");
 
       const adapted = await adaptImageBuffer(source, {
@@ -305,6 +329,7 @@ describe("asset processing pipeline", () => {
         outputDir: dir,
         overwrite: true,
         transparentBackground: true,
+        chromaKey: { color: "#00ff00", tolerance: 58 },
         trimTransparentEdges: false,
         padToPowerOfTwo: false,
         extrudePixels: 0,
@@ -320,6 +345,10 @@ describe("asset processing pipeline", () => {
 
       const raw = await sharp(adapted.path).raw().toBuffer({ resolveWithObject: true });
       expect(raw.data[3]).toBe(0);
+      const subjectOffset = (10 * raw.info.width + 10) * raw.info.channels;
+      const residueOffset = (7 * raw.info.width + 7) * raw.info.channels;
+      expect(raw.data[subjectOffset + 3]).toBe(255);
+      expect(raw.data[residueOffset + 3]).toBe(0);
       expect(adapted.warnings.some((warning) => warning.includes("Local segmentation cutout backend ran"))).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
