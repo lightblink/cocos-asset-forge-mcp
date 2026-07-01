@@ -191,7 +191,7 @@ fal image example:
   "imageProvider": {
     "kind": "fal-image",
     "name": "fal-flux-2-pro",
-    "apiKey": "replace-with-your-fal-key",
+    "apiKeyEnv": "FAL_KEY",
     "model": "fal-ai/flux-2-pro"
   }
 }
@@ -204,13 +204,13 @@ fal audio example:
   "sfxProvider": {
     "kind": "fal-audio",
     "name": "fal-stable-audio-3-small-sfx",
-    "apiKey": "replace-with-your-fal-key",
+    "apiKeyEnv": "FAL_KEY",
     "model": "fal-ai/stable-audio-3/small/sfx/text-to-audio"
   },
   "musicProvider": {
     "kind": "fal-audio",
     "name": "fal-stable-audio-3-small-music",
-    "apiKey": "replace-with-your-fal-key",
+    "apiKeyEnv": "FAL_KEY",
     "model": "fal-ai/stable-audio-3/small/music/text-to-audio"
   }
 }
