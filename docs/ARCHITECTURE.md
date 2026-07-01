@@ -43,6 +43,7 @@ flowchart LR
 - Chroma-key/corner-color background removal.
 - Optional local-command segmentation fallback, such as `rembg i {input} {output}`.
 - Fixed-grid contact sheet slicing for 3x3, 4x3, and other sprite consistency workflows.
+- Consecutive-frame variation QA to warn when an animation sheet is mostly repeated static poses.
 - Transparent-edge trimming with configurable safety padding.
 - Optional power-of-two padding.
 - Sprite sheet packing.

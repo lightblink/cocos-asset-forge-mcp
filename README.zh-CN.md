@@ -25,6 +25,7 @@
 - 本地抠图管线：默认让模型生成纯 `#00ff00` 色键背景，再由 Asset Forge 本地删除与边界连通的背景区域，而不是相信模型画出来的假透明棋盘格。
 - 可选本地分割 backend：可以配置 `rembg` 这类本地命令，用来处理已有图片、复杂背景，或在色键抠图不足时自动兜底。
 - 一致性优先的动画流程：一次生成 3x3/4x3 contact sheet，切割成帧、清透明通道，再重新打包给 Cocos。
+- 动作可读性 QA：序列帧工具会比较连续帧差异，发现模型生成了近似重复的静态姿势时返回 warning。
 - Provider 抽象：离线可用 mock provider，生产可用 fal、Hugging Face、魔搭、硅基流动、OpenAI-compatible、通用 HTTP 和 ComfyUI 风格 workflow。
 - 图片、音效、音乐分开选择模型，方便游戏团队按素材类型选择最合适的模型。
 - MCP 原生工具接口，返回 JSON 报告，包含写出的文件、警告、Cocos 导入建议和下一步动作。
@@ -220,6 +221,8 @@ fal 音频示例：
 
 角色、敌人、多状态道具和短动画循环，优先使用 `asset_forge_generate_sprite_grid_sheet`。它会让图片模型一次生成固定网格 contact sheet，再按从左到右、从上到下切割。因为模型在同一张图里同时看到所有姿势，通常比逐帧独立生成更容易保持身份、服装、比例、视角和色板一致。
 
+grid prompt 会针对 run、walk、idle、jump、attack、death 等常见动作加入关键姿势阶段要求。切帧之后，Asset Forge 会比较连续帧差异；如果这张 sheet 看起来像重复静态图，会返回低帧差 warning。看到这个 warning 应该把这一组动画视为不合格，换更强的动作提示词、参考 sheet，或者使用更能遵循 contact-sheet 指令的模型重新生成。
+
 只有当 provider 不能稳定生成 contact sheet，或者每一帧需要完全不同提示词时，才优先用 `asset_forge_generate_sprite_sheet`。单个道具、占位图和静态元素使用 `asset_forge_generate_sprite`。
 
 对于透明精灵，Asset Forge 默认使用色键工作流：先要求模型生成纯 `#00ff00` 背景，再本地删除与图片边界连通的色键区域。这样输出的是确实带 alpha 的 PNG，也能避免把 AI 画出来的棋盘格误当成透明通道。
@@ -287,7 +290,7 @@ npm run build
 - Replicate、Fal、Stability、ElevenLabs、Suno-like、本地模型 provider 包。
 - 真正复制边缘像素的 texture extrusion。
 - Tiled `.tsx` 生成和可选 `.tmx` starter map。
-- 序列帧一致性视觉 QA 报告。
+- 更丰富的序列帧一致性和姿势推进视觉 QA 报告。
 
 ## 参考
 
