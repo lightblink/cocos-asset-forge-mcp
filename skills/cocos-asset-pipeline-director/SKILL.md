@@ -11,6 +11,8 @@ Use this skill to direct Cocos Creator asset work through a dedicated asset-gene
 
 The skill is intentionally a pipeline layer, not a competing image model wrapper. If the configured MCP can produce or adapt the requested asset, use it first.
 
+Use `cocos-asset-review-director` after generation or adaptation when assets will be imported into gameplay, especially for player/enemy sprites, sprite sheets, VFX, UI packs, directional art, or anything whose readability affects the first loop.
+
 ## Compatibility
 
 Expected MCP capabilities:
@@ -43,9 +45,12 @@ If one of these tools is unavailable, use the closest available MCP tool and cle
    - Reuse existing canonical assets when present instead of regenerating known characters or UI styles.
 4. Select the MCP pipeline by runtime job.
 5. Generate into the MCP output directory unless the user provides a project-specific output path.
-6. Verify outputs before import.
+6. Review outputs before import.
+   - For gameplay-critical sprites and VFX, apply an explicit asset contract: role, facing direction, runtime size, motion requirement, alpha policy, collision expectation, and import target.
+   - Use `cocos-asset-review-director` for design fit, orientation, animation readiness, alpha/silhouette issues, mobile thumbnail readability, and collision fit.
+   - Do not import failed production-candidate assets silently. Adapt or regenerate the smallest failed unit.
 7. Import or stage assets under Cocos-friendly project folders only when requested or clearly required by the task.
-8. Report exact paths, tool choices, generation settings, and QA status.
+8. Report exact paths, tool choices, generation settings, review status, and any rejected or deferred assets.
 
 ## Tool Selection
 
@@ -68,6 +73,7 @@ Only use audio generation or adaptation if the matching audio MCP tool is actual
 For a new playable local game, do not default to geometry-only visuals unless the user explicitly asks for a logic-only prototype or the asset MCP is unavailable. Prepare the smallest useful pack:
 
 - core gameplay sprites or placeholder tiles for player pieces, hazards, pickups, board cells, or equivalent interactables
+- required first-loop animated assets such as player thrust, hit/death feedback, explosion, pickup, warning, muzzle flash, or UI state frames when those cues carry readability or game feel
 - minimal background or playfield frame when it improves readability
 - HUD/UI elements needed for score, pause, restart, result, and primary actions
 - immediate feedback VFX or sprite states for success, failure, hit, clear, reward, or invalid action
@@ -92,6 +98,19 @@ For generated visual assets, include the following constraints unless they confl
 For sprite sheets and grid sheets, also specify frame count, rows/columns when known, action name, full motion cycle, consistent facing direction, consistent proportions, and whether the first/last frame should loop.
 
 Prefer stable seeds for related assets in the same character, faction, UI theme, tileset, or effect family.
+
+## Direction And Animation Contracts
+
+When generating directional sprites, include explicit motion semantics in the prompt. For example, top-down vertical shooters should state whether the nose points to the top or bottom of the image, where engines sit, and which direction bullets or attacks travel.
+
+When a game object needs feedback animation, request a sprite sheet or grid sheet during the first asset pass instead of accepting a single still image and hoping implementation can compensate. Typical first-loop animation contracts include:
+
+- player: idle/thrust loop, hit flash or shield state, death burst
+- enemy: hit state, death explosion, spawn or attack tell
+- shooter VFX: muzzle flash, projectile trail, impact burst, warning marker
+- rewards/UI: pickup pulse, meter fill, button press, power-ready state
+
+If a still image is intentionally accepted for an animated role, report the tradeoff and the first animation asset to add before production QA.
 
 ## Cocos Project Placement
 
@@ -123,6 +142,7 @@ Before finalizing an asset task, verify the relevant gates and report any skippe
 
 - Output files exist at the generated or imported paths.
 - PNG assets intended as sprites preserve transparency after postprocessing.
+- Gameplay-critical sprites pass role, orientation, alpha/silhouette, mobile readability, and collision-fit review before import.
 - Sprite sheets have expected frame count, rows/columns, padding, and metadata.
 - Animation frames keep stable proportions, facing direction, and readable action.
 - Tilesets have consistent tile dimensions and enough modular pieces for the requested map use.

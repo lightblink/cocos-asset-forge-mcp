@@ -1,0 +1,7 @@
+interface:
+  display_name: "Cocos Asset Review Director"
+  short_description: "Reviews Cocos assets for design and runtime fit."
+  default_prompt: "Use $cocos-asset-review-director to review these generated Cocos assets before importing them."
+
+policy:
+  allow_implicit_invocation: true
