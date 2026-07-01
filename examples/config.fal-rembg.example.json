@@ -1,0 +1,42 @@
+{
+  "defaultOutputDir": "./generated/cocos-assets",
+  "imageProvider": {
+    "kind": "fal-image",
+    "name": "fal-flux-2-pro",
+    "apiKey": "replace-with-your-fal-key",
+    "model": "fal-ai/flux-2-pro",
+    "headers": {},
+    "timeoutMs": 180000
+  },
+  "sfxProvider": {
+    "kind": "fal-audio",
+    "name": "fal-stable-audio-3-small-sfx",
+    "apiKey": "replace-with-your-fal-key",
+    "model": "fal-ai/stable-audio-3/small/sfx/text-to-audio",
+    "headers": {},
+    "timeoutMs": 300000
+  },
+  "musicProvider": {
+    "kind": "fal-audio",
+    "name": "fal-stable-audio-3-small-music",
+    "apiKey": "replace-with-your-fal-key",
+    "model": "fal-ai/stable-audio-3/small/music/text-to-audio",
+    "headers": {},
+    "timeoutMs": 300000
+  },
+  "cutout": {
+    "backend": "auto",
+    "command": "rembg",
+    "args": ["i", "{input}", "{output}"],
+    "timeoutMs": 300000,
+    "triggerMinRemovedRatio": 0.25
+  },
+  "cocos": {
+    "creatorVersion": "3.x",
+    "assetRoot": "assets"
+  },
+  "safety": {
+    "overwrite": false,
+    "allowNetworkProviders": true
+  }
+}

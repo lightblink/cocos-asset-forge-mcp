@@ -15,6 +15,12 @@ describe("provider configuration", () => {
 
     expect(config.imageProvider.apiKey).toBe("fal-secret");
     expect(redactConfig(config).imageProvider.apiKey).toBe("sk-...redacted");
+    expect(config.cutout).toMatchObject({
+      backend: "auto",
+      args: ["i", "{input}", "{output}"],
+      timeoutMs: 180000,
+      triggerMinRemovedRatio: 0.25
+    });
   });
 
   it("creates first-class image providers for hosted model choices", () => {

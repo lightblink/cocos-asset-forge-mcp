@@ -23,6 +23,7 @@
 
 - 面向 Cocos 的输出：真正 RGBA 透明 PNG、帧 manifest、`.plist` 图集元数据，以及适合 AudioClip 的 WAV/MP3/OGG。
 - 本地抠图管线：默认让模型生成纯 `#00ff00` 色键背景，再由 Asset Forge 本地删除与边界连通的背景区域，而不是相信模型画出来的假透明棋盘格。
+- 可选本地分割 backend：可以配置 `rembg` 这类本地命令，用来处理已有图片、复杂背景，或在色键抠图不足时自动兜底。
 - 一致性优先的动画流程：一次生成 3x3/4x3 contact sheet，切割成帧、清透明通道，再重新打包给 Cocos。
 - Provider 抽象：离线可用 mock provider，生产可用 fal、Hugging Face、魔搭、硅基流动、OpenAI-compatible、通用 HTTP 和 ComfyUI 风格 workflow。
 - 图片、音效、音乐分开选择模型，方便游戏团队按素材类型选择最合适的模型。
@@ -178,6 +179,7 @@ Provider key 可以通过 `apiKey` 直接写进 MCP server 配置，也可以继
 Provider 示例：
 
 - [examples/config.fal.example.json](./examples/config.fal.example.json)
+- [examples/config.fal-rembg.example.json](./examples/config.fal-rembg.example.json)
 - [examples/config.huggingface.example.json](./examples/config.huggingface.example.json)
 - [examples/config.siliconflow.example.json](./examples/config.siliconflow.example.json)
 - [examples/config.modelscope.example.json](./examples/config.modelscope.example.json)
@@ -221,6 +223,26 @@ fal 音频示例：
 只有当 provider 不能稳定生成 contact sheet，或者每一帧需要完全不同提示词时，才优先用 `asset_forge_generate_sprite_sheet`。单个道具、占位图和静态元素使用 `asset_forge_generate_sprite`。
 
 对于透明精灵，Asset Forge 默认使用色键工作流：先要求模型生成纯 `#00ff00` 背景，再本地删除与图片边界连通的色键区域。这样输出的是确实带 alpha 的 PNG，也能避免把 AI 画出来的棋盘格误当成透明通道。
+
+如果输入背景不可控，可以配置 `cutout.backend`：
+
+- `auto`: 先走色键抠图；如果抠除比例太低，并且配置了 `command`，就自动回退到本地分割。
+- `chroma-key`: 只使用内置的边界连通色键抠图。
+- `local-command`: 始终调用本地分割命令。
+
+本机安装 Python `rembg` 后的示例：
+
+```json
+{
+  "cutout": {
+    "backend": "auto",
+    "command": "rembg",
+    "args": ["i", "{input}", "{output}"],
+    "timeoutMs": 300000,
+    "triggerMinRemovedRatio": 0.25
+  }
+}
+```
 
 参考图工作流可以传 `referenceImagePath` 或 `referenceImageUrl`，并把 `imageProvider.model` 配置为 edit/image-to-image 能力的 fal 模型。纯 text-to-image 模型在传参考图时会被主动拒绝，避免调用方误以为一致性已生效。
 

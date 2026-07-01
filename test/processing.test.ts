@@ -170,6 +170,52 @@ describe("asset processing pipeline", () => {
     }
   });
 
+  it("can delegate cutouts to a configured local command backend", async () => {
+    const dir = await tempDir();
+    try {
+      const source = await sharp({
+        create: {
+          width: 16,
+          height: 16,
+          channels: 4,
+          background: { r: 20, g: 40, b: 180, alpha: 1 }
+        }
+      }).png().toBuffer();
+      const script = [
+        "const fs=require('fs');",
+        "const sharp=require('sharp');",
+        "sharp(fs.readFileSync(process.argv[1])).ensureAlpha().composite([{",
+        "input: { create: { width: 16, height: 16, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } },",
+        "blend: 'dest-in'",
+        "}]).png().toFile(process.argv[2]);"
+      ].join("");
+
+      const adapted = await adaptImageBuffer(source, {
+        name: "local-command",
+        outputDir: dir,
+        overwrite: true,
+        transparentBackground: true,
+        trimTransparentEdges: false,
+        padToPowerOfTwo: false,
+        extrudePixels: 0,
+        maxTextureSize: 256,
+        cutout: {
+          backend: "local-command",
+          command: process.execPath,
+          args: ["-e", script, "{input}", "{output}"],
+          timeoutMs: 10000,
+          triggerMinRemovedRatio: 0.25
+        }
+      });
+
+      const raw = await sharp(adapted.path).raw().toBuffer({ resolveWithObject: true });
+      expect(raw.data[3]).toBe(0);
+      expect(adapted.warnings.some((warning) => warning.includes("Local segmentation cutout backend ran"))).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("adapts generated audio into a Cocos AudioClip file", async () => {
     const dir = await tempDir();
     try {

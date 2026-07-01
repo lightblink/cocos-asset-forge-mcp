@@ -26,6 +26,30 @@ export const providerSchema = z.object({
   responsePath: z.string().optional()
 });
 
+export const cutoutSchema = z
+  .object({
+    backend: z.enum(["auto", "chroma-key", "local-command"]).default("auto"),
+    command: z.string().min(1).optional(),
+    args: z.array(z.string()).default(["i", "{input}", "{output}"]),
+    timeoutMs: z.number().int().positive().default(180000),
+    triggerMinRemovedRatio: z.number().min(0).max(1).default(0.25)
+  })
+  .superRefine((value, context) => {
+    if (value.backend === "local-command" && !value.command) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["command"],
+        message: "cutout.command is required when cutout.backend is local-command"
+      });
+    }
+  })
+  .default({
+    backend: "auto",
+    args: ["i", "{input}", "{output}"],
+    timeoutMs: 180000,
+    triggerMinRemovedRatio: 0.25
+  });
+
 export const forgeConfigSchema = z.object({
   defaultOutputDir: z.string().default("./generated/cocos-assets"),
   imageProvider: providerSchema.default({ kind: "mock", name: "mock-image" }),
@@ -33,6 +57,7 @@ export const forgeConfigSchema = z.object({
   sfxProvider: providerSchema.optional(),
   musicProvider: providerSchema.optional(),
   videoProvider: providerSchema.optional(),
+  cutout: cutoutSchema,
   cocos: z
     .object({
       creatorVersion: z.string().default("3.x"),

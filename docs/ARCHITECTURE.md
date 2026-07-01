@@ -12,7 +12,8 @@ flowchart LR
   Agent["Coding Agent / MCP Client"] --> Tools["MCP Tools"]
   Tools --> ImageProvider["Image Provider"]
   Tools --> AudioProvider["Audio Provider"]
-  ImageProvider --> ImagePipeline["Image Adapt Pipeline"]
+  ImageProvider --> Cutout["Cutout Backend"]
+  Cutout --> ImagePipeline["Image Adapt Pipeline"]
   AudioProvider --> AudioPipeline["Audio Adapt Pipeline"]
   ImagePipeline --> Files["PNG / frames / atlas / plist / manifest"]
   AudioPipeline --> AudioFiles["WAV / MP3 / OGG / manifest"]
@@ -40,6 +41,7 @@ flowchart LR
 
 - RGBA PNG normalization.
 - Chroma-key/corner-color background removal.
+- Optional local-command segmentation fallback, such as `rembg i {input} {output}`.
 - Fixed-grid contact sheet slicing for 3x3, 4x3, and other sprite consistency workflows.
 - Optional transparent-edge trimming.
 - Optional power-of-two padding.
@@ -61,6 +63,7 @@ flowchart LR
 - Cocos `.meta` files are not generated in v0.1 because Creator owns UUID and importer metadata. The safer default is to let Cocos import generated assets, then build editor automation around the manifest.
 - Sprite sheets include both packed PNG and individual frames. That gives teams the choice between Cocos Auto Atlas, external atlas tooling, and custom AnimationClip generation.
 - Contact-sheet generation is the preferred animation path because one model call usually preserves identity, costume, palette, and camera better than isolated per-frame calls.
+- Cutout is one pipeline with interchangeable backends, not multiple overlapping tools: generated assets default to connected chroma-key removal, while local segmentation is reserved for `auto` fallback or explicitly configured `local-command` mode.
 - The mock provider is not a toy path; it is the contract test path. New providers should be able to pass the same processing tests.
 
 ## Security Notes
@@ -69,3 +72,4 @@ flowchart LR
 - `asset_forge_get_config` redacts whether key env vars are merely set or missing.
 - The server refuses to overwrite files unless `safety.overwrite` is enabled.
 - Provider responses are treated as untrusted binary input and normalized before use.
+- Local cutout commands are executed without a shell and receive temporary input/output file paths through explicit args.

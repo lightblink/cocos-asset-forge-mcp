@@ -16,6 +16,7 @@ npm run build
 Choose a provider config preset and replace placeholders:
 
 - `examples/config.fal.example.json`: recommended fal setup through inline `apiKey`.
+- `examples/config.fal-rembg.example.json`: fal plus optional local segmentation fallback through `rembg`.
 - `examples/config.huggingface.example.json`: Hugging Face image generation through inline `apiKey`.
 - `examples/config.siliconflow.example.json`: SiliconFlow image generation through inline `apiKey`.
 - `examples/config.modelscope.example.json`: ModelScope-style HTTP image endpoint through inline `apiKey`.
@@ -43,6 +44,18 @@ Alternatively, keep secrets out of JSON and use `apiKeyEnv` with `.env.local`:
 
 ```bash
 FAL_KEY="your-fal-key"
+```
+
+Optional: install a local segmentation command for uncontrolled backgrounds. With Python `rembg` available on `PATH`, use `examples/config.fal-rembg.example.json` or add:
+
+```json
+{
+  "cutout": {
+    "backend": "auto",
+    "command": "rembg",
+    "args": ["i", "{input}", "{output}"]
+  }
+}
 ```
 
 ### MCP Client Config
@@ -107,7 +120,7 @@ Repository path or URL:
 Requirements:
 1. Clone or use the local repo.
 2. Run npm install and npm run build.
-3. Ask me which provider preset I want: fal, Hugging Face, SiliconFlow, or ModelScope.
+3. Ask me which provider preset I want: fal, fal plus local rembg cutout, Hugging Face, SiliconFlow, or ModelScope.
 4. Configure provider credentials in one of two ways:
    - If I explicitly provide a key outside chat or tell you it is already in a local config file, put it in the MCP server JSON config as apiKey.
    - Otherwise prefer apiKeyEnv and .env.local. Do not ask me to paste secrets into chat.
@@ -159,6 +172,7 @@ npm run build
 选择一个 provider 配置预设，并替换占位符：
 
 - `examples/config.fal.example.json`: 推荐的 fal 配置，默认通过内联 `apiKey` 读取 key。
+- `examples/config.fal-rembg.example.json`: fal 加可选本地 `rembg` 分割兜底。
 - `examples/config.huggingface.example.json`: 通过内联 `apiKey` 使用 Hugging Face 生图。
 - `examples/config.siliconflow.example.json`: 通过内联 `apiKey` 使用硅基流动生图。
 - `examples/config.modelscope.example.json`: 通过内联 `apiKey` 使用魔搭风格 HTTP 图片 endpoint。
@@ -186,6 +200,18 @@ fal 推荐模型：
 
 ```bash
 FAL_KEY="your-fal-key"
+```
+
+可选：为不可控背景安装本地分割命令。如果本机 `PATH` 里可以直接调用 Python `rembg`，可以使用 `examples/config.fal-rembg.example.json`，或添加：
+
+```json
+{
+  "cutout": {
+    "backend": "auto",
+    "command": "rembg",
+    "args": ["i", "{input}", "{output}"]
+  }
+}
 ```
 
 ### MCP 客户端配置
@@ -250,7 +276,7 @@ startup_timeout_sec = 120
 要求：
 1. 克隆仓库，或使用本地仓库。
 2. 运行 npm install 和 npm run build。
-3. 先问我要使用哪个 provider 预设：fal、Hugging Face、硅基流动或魔搭。
+3. 先问我要使用哪个 provider 预设：fal、fal 加本地 rembg 抠图、Hugging Face、硅基流动或魔搭。
 4. 用下面两种方式之一配置 provider key：
    - 如果我明确说明 key 已经通过聊天外的方式提供，或已经在本地配置文件里，可以把它写进 MCP server JSON 配置的 apiKey。
    - 否则优先使用 apiKeyEnv 和 .env.local。不要让我在聊天里粘贴密钥。

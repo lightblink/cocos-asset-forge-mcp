@@ -23,6 +23,7 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 
 - Cocos-ready output: real RGBA transparent PNGs, frame manifests, `.plist` atlas metadata, and AudioClip-friendly WAV/MP3/OGG files.
 - Local cutout pipeline: generated sprites use a flat `#00ff00` chroma-key background by default, then Asset Forge removes the connected background locally instead of trusting fake AI checkerboards.
+- Optional local segmentation backend: configure a command such as `rembg` for difficult existing images or automatic fallback when chroma-key removal is not enough.
 - Consistency-first animation workflow: generate a 3x3/4x3 contact sheet, slice it into frames, clean alpha, then repack it for Cocos.
 - Provider abstraction: use mock providers offline, fal, Hugging Face, ModelScope, SiliconFlow, OpenAI-compatible endpoints, generic HTTP, or ComfyUI-style workflows.
 - Separate model intent for images, SFX, and music so game teams can choose the right model for each asset class.
@@ -178,6 +179,7 @@ Supported provider kinds:
 Provider preset examples:
 
 - [examples/config.fal.example.json](./examples/config.fal.example.json)
+- [examples/config.fal-rembg.example.json](./examples/config.fal-rembg.example.json)
 - [examples/config.huggingface.example.json](./examples/config.huggingface.example.json)
 - [examples/config.siliconflow.example.json](./examples/config.siliconflow.example.json)
 - [examples/config.modelscope.example.json](./examples/config.modelscope.example.json)
@@ -221,6 +223,26 @@ Use `asset_forge_generate_sprite_grid_sheet` for characters, enemies, props with
 Use `asset_forge_generate_sprite_sheet` only when the provider cannot produce clean contact sheets, or when each frame needs a very different prompt. Use `asset_forge_generate_sprite` for standalone assets and placeholders.
 
 For transparent sprites, Asset Forge defaults to a chroma-key workflow: it asks the model for a flat `#00ff00` background, then removes only the key-colored region connected to the image border. This produces real alpha PNGs and avoids treating AI-drawn checkerboards as transparency.
+
+When source backgrounds are not controlled, configure `cutout.backend`:
+
+- `auto`: chroma-key first; if too little background is removed and `command` is configured, fall back to local segmentation.
+- `chroma-key`: only run the built-in connected chroma-key remover.
+- `local-command`: always run a local segmentation command.
+
+Example with Python `rembg` installed on the machine:
+
+```json
+{
+  "cutout": {
+    "backend": "auto",
+    "command": "rembg",
+    "args": ["i", "{input}", "{output}"],
+    "timeoutMs": 300000,
+    "triggerMinRemovedRatio": 0.25
+  }
+}
+```
 
 For reference-image workflows, pass `referenceImagePath` or `referenceImageUrl` and configure `imageProvider.model` to an edit/image-to-image capable fal model. Text-to-image models are intentionally rejected when a reference image is supplied, so the calling agent gets a clear failure instead of silently losing consistency.
 

@@ -71,6 +71,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       name,
       outputDir,
       overwrite: context.config.safety.overwrite,
+      cutout: context.config.cutout,
       ...withDefaultChromaKey(input.postprocess)
     });
     return textResult(makeReport({
@@ -114,6 +115,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         name: `${baseName}-${input.action}-${String(index + 1).padStart(3, "0")}`,
         outputDir: framesDir,
         overwrite: context.config.safety.overwrite,
+        cutout: context.config.cutout,
         ...withDefaultChromaKey(input.postprocess)
       });
       framePaths.push(adapted.path);
@@ -193,7 +195,8 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       trimTransparentEdges: false,
       padToPowerOfTwo: false,
       extrudePixels: 0,
-      maxTextureSize: Math.max(sheetWidth, sheetHeight, input.postprocess.maxTextureSize)
+      maxTextureSize: Math.max(sheetWidth, sheetHeight, input.postprocess.maxTextureSize),
+      cutout: context.config.cutout
     });
     const frameBuffers = await splitGridImageToBuffers(generated.bytes, {
       rows: input.rows,
@@ -207,6 +210,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         name: `${baseName}-${slugify(input.action)}-${String(frame.index + 1).padStart(3, "0")}`,
         outputDir: framesDir,
         overwrite: context.config.safety.overwrite,
+        cutout: context.config.cutout,
         ...withDefaultChromaKey(input.postprocess),
         chromaKey: keyColor
           ? { color: keyColor, tolerance: input.postprocess.chromaKey?.tolerance ?? DEFAULT_KEY_TOLERANCE }
@@ -270,6 +274,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         name: `${baseName}-tile-${String(index + 1).padStart(3, "0")}`,
         outputDir: tilesDir,
         overwrite: context.config.safety.overwrite,
+        cutout: context.config.cutout,
         ...withDefaultChromaKey(input.postprocess)
       });
       tilePaths.push(adapted.path);
@@ -324,6 +329,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
         name: `${baseName}-${slugify(element)}`,
         outputDir,
         overwrite: context.config.safety.overwrite,
+        cutout: context.config.cutout,
         ...withDefaultChromaKey(input.postprocess)
       });
       files.push(adapted.path);
@@ -423,6 +429,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       name,
       outputDir,
       overwrite: context.config.safety.overwrite,
+      cutout: context.config.cutout,
       ...input.postprocess
     });
     return textResult(makeReport({

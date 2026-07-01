@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import sharp from "sharp";
 import { ensureDir, writeFileSafe } from "../utils/fs.js";
@@ -13,6 +16,15 @@ export type ImageAdaptOptions = {
   padToPowerOfTwo: boolean;
   extrudePixels: number;
   maxTextureSize: number;
+  cutout?: CutoutOptions;
+};
+
+export type CutoutOptions = {
+  backend: "auto" | "chroma-key" | "local-command";
+  command?: string;
+  args: string[];
+  timeoutMs: number;
+  triggerMinRemovedRatio: number;
 };
 
 export type AdaptedImage = {
@@ -28,7 +40,11 @@ type RemoveBackgroundResult = {
   image: sharp.Sharp;
   removedPixels: number;
   totalPixels: number;
-  key: Rgb;
+};
+
+type LocalCutoutResult = {
+  bytes: Buffer;
+  warnings: string[];
 };
 
 export type SpriteSheetOptions = {
@@ -72,17 +88,33 @@ export async function adaptImageBuffer(buffer: Buffer, options: ImageAdaptOption
   let image = sharp(buffer, { animated: false }).ensureAlpha();
 
   if (options.transparentBackground) {
-    const removed = await removeBackground(image, options.chromaKey);
-    image = removed.image;
-    const removedRatio = removed.totalPixels > 0 ? removed.removedPixels / removed.totalPixels : 0;
-    if (removedRatio < 0.01) {
-      warnings.push(
-        `Background removal removed only ${(removedRatio * 100).toFixed(1)}% of pixels. The model may not have used a flat key background.`
-      );
-    } else if (removedRatio > 0.92) {
-      warnings.push(
-        `Background removal removed ${(removedRatio * 100).toFixed(1)}% of pixels. Check that the subject was not too close to the key color.`
-      );
+    if (shouldRunLocalCommandFirst(options.cutout)) {
+      const local = await runLocalCommandCutout(await image.clone().png().toBuffer(), options.cutout);
+      image = sharp(local.bytes, { animated: false }).ensureAlpha();
+      warnings.push(...local.warnings);
+    } else {
+      const sourceForFallback = await image.clone().png().toBuffer();
+      const removed = await removeBackground(image, options.chromaKey);
+      image = removed.image;
+      const removedRatio = removed.totalPixels > 0 ? removed.removedPixels / removed.totalPixels : 0;
+      if (removedRatio < 0.01) {
+        warnings.push(
+          `Background removal removed only ${(removedRatio * 100).toFixed(1)}% of pixels. The model may not have used a flat key background.`
+        );
+      } else if (removedRatio > 0.92) {
+        warnings.push(
+          `Background removal removed ${(removedRatio * 100).toFixed(1)}% of pixels. Check that the subject was not too close to the key color.`
+        );
+      }
+
+      if (shouldFallbackToLocalCommand(options.cutout, removedRatio)) {
+        const local = await runLocalCommandCutout(sourceForFallback, options.cutout);
+        image = sharp(local.bytes, { animated: false }).ensureAlpha();
+        warnings.push(
+          `Chroma-key removal removed only ${(removedRatio * 100).toFixed(1)}% of pixels, so local segmentation backend was used.`
+        );
+        warnings.push(...local.warnings);
+      }
     }
   }
 
@@ -298,9 +330,71 @@ async function removeBackground(
       }
     }),
     removedPixels,
-    totalPixels: raw.info.width * raw.info.height,
-    key
+    totalPixels: raw.info.width * raw.info.height
   };
+}
+
+function shouldRunLocalCommandFirst(cutout: CutoutOptions | undefined): cutout is CutoutOptions & { command: string } {
+  return cutout?.backend === "local-command" && Boolean(cutout.command);
+}
+
+function shouldFallbackToLocalCommand(
+  cutout: CutoutOptions | undefined,
+  removedRatio: number
+): cutout is CutoutOptions & { command: string } {
+  return cutout?.backend === "auto" && Boolean(cutout.command) && removedRatio < cutout.triggerMinRemovedRatio;
+}
+
+async function runLocalCommandCutout(
+  inputBytes: Buffer,
+  cutout: CutoutOptions & { command: string }
+): Promise<LocalCutoutResult> {
+  const dir = await mkdtemp(join(tmpdir(), "cocos-asset-cutout-"));
+  const inputPath = join(dir, "input.png");
+  const outputPath = join(dir, "output.png");
+  try {
+    await writeFileSafe(inputPath, inputBytes, true);
+    const args = cutout.args.map((arg) => arg
+      .replaceAll("{input}", inputPath)
+      .replaceAll("{output}", outputPath));
+    await runCommand(cutout.command, args, cutout.timeoutMs);
+    const bytes = await readFile(outputPath);
+    await sharp(bytes, { animated: false }).ensureAlpha().metadata();
+    return {
+      bytes,
+      warnings: [`Local segmentation cutout backend ran: ${cutout.command}`]
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function runCommand(command: string, args: string[], timeoutMs: number): Promise<void> {
+  await new Promise<void>((resolvePromise, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`Local cutout command timed out after ${timeoutMs}ms: ${command}`));
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolvePromise();
+      } else {
+        const output = [...stdout, ...stderr].map((chunk) => chunk.toString("utf8")).join("").trim();
+        reject(new Error(`Local cutout command failed with exit code ${code}: ${output}`));
+      }
+    });
+  });
 }
 
 async function extrudeTransparentBorder(image: sharp.Sharp, pixels: number): Promise<sharp.Sharp> {
