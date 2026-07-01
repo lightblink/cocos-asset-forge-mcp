@@ -25,6 +25,7 @@ Use hard gates only for defects that clearly break the asset's job: corrupt file
 2. Inspect the actual artifact.
    - Prefer visual inspection for PNG, sprite sheets, UI packs, and contact sheets.
    - Check metadata, dimensions, frame layout, file names, transparency, and project placement when available.
+   - For batched contact sheets, review the source sheet and the sliced cells. Check for merged cells, accidental multi-subject clutter, cell drift, bad crops, duplicate cells, unusable cells, and whether the batch actually reduced generation calls.
 3. Judge design fit.
    - Verify the asset communicates the intended gameplay identity: player, enemy, hazard, reward, neutral prop, background, UI, or feedback effect.
    - Check whether shape, color, value, motion, scale, material, faction language, and feedback meaning match the design and art direction.
@@ -61,6 +62,7 @@ Use these dimensions as prompts for judgment. Not every asset needs every dimens
 - Runtime fairness: collision fit, visual footprint, warning clarity, effect occlusion, tap target clarity, and perceived hit accuracy.
 - Audio fit: event meaning, loudness, length, fatigue risk, loop quality, and whether cues conflict with one another.
 - Performance and package risk: texture size, frame count, duplicate variants, audio duration, first-package budget, and bundle placement.
+- Generation-cost fit: whether related images were batched into contact sheets or UI/tileset packs instead of generated one by one, and whether any one-off generation has a clear reason.
 - Compliance and originality: unwanted logos, watermarks, generated text artifacts, brand/IP confusion, or inappropriate visual references.
 
 ## Contextual Examples
@@ -155,4 +157,5 @@ For substantial reviews, return:
 - Collision, visual footprint, warning, and feedback feel fair to the player.
 - UI and audio support the first loop without confusing the player.
 - Performance, package, and bundle risks are visible before import.
+- Related asset families are batched where practical, with failed cells adapted or selectively regenerated instead of re-running many one-off generations.
 - Failed assets are not imported silently as production candidates.

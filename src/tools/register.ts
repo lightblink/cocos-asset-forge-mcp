@@ -157,7 +157,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
 
   server.registerTool("asset_forge_generate_sprite_grid_sheet", {
     title: "Generate Cocos Sprite Grid Sheet",
-    description: "Generate one AI contact sheet such as 3x3 or 4x3 for better character consistency, slice it into frames, clean alpha, and pack Cocos-ready sprite sheet metadata.",
+    description: "Generate one AI contact sheet such as 3x3 or 4x3 for better consistency and lower cost, slice it into frames, clean alpha, and pack Cocos-ready sprite sheet metadata. Use for animations, state sets, variants, icons, or related static asset packs.",
     inputSchema: generateSpriteGridSheetInput
   }, async (input) => {
     const baseName = slugify(input.name);
@@ -165,6 +165,7 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
     const framesDir = join(outputDir, "frames");
     const sourceDir = join(outputDir, "source");
     const frameCount = input.frameCount ?? input.rows * input.columns;
+    const isVariantGrid = isVariantGridAction(input.action);
     const sheetWidth = input.columns * input.frameSize.width;
     const sheetHeight = input.rows * input.frameSize.height;
     const keyColor = input.contactSheetBackground === "flat_key_color" ? DEFAULT_KEY_COLOR : undefined;
@@ -250,12 +251,16 @@ export function registerAssetTools(server: McpServer, context: ToolContext): voi
       warnings: [
         ...warnings,
         `Frame variation QA: averageDelta=${variation.averageDelta.toFixed(3)}, minDelta=${variation.minDelta.toFixed(3)}, maxDelta=${variation.maxDelta.toFixed(3)}.`,
-        "Grid contact sheets improve consistency, but frame boundaries and motion readability should still be visually checked before final animation timing."
+        isVariantGrid
+          ? "Grid contact sheets reduce generation cost, but every sliced cell should still be reviewed for role fit, silhouette, alpha, and accidental merged subjects."
+          : "Grid contact sheets improve consistency, but frame boundaries and motion readability should still be visually checked before final animation timing."
       ],
       importPath: cocosImportPath(context.config, sheet.imagePath),
-      recommendedType: "SpriteAtlas + AnimationClip",
+      recommendedType: isVariantGrid ? "SpriteAtlas / sliced SpriteFrames" : "SpriteAtlas + AnimationClip",
       notes: [
-        "This used one AI contact-sheet generation for stronger identity consistency across frames.",
+        isVariantGrid
+          ? "This used one AI contact-sheet generation for multiple related assets or states, reducing provider calls versus one-by-one sprite generation."
+          : "This used one AI contact-sheet generation for stronger identity consistency across frames.",
         "The source contact sheet is preserved under source/ for auditing.",
         "The frames directory contains sliced, alpha-cleaned PNGs; the packed PNG and plist are ready for atlas workflows."
       ]
@@ -536,7 +541,7 @@ function textResult(value: unknown) {
   };
 }
 
-function planPack(input: {
+export function planPack(input: {
   gameDescription: string;
   targetPlatform: string;
   artDirection?: string;
@@ -549,8 +554,9 @@ function planPack(input: {
     artDirection: baseStyle,
     recommendedOrder: [
       "Define art bible keywords and negative prompts.",
-      "Generate placeholder sprites and UI first to unblock implementation.",
-      "Generate animation frames with locked seeds and consistent camera language.",
+      "Generate one style-anchor sprite only when needed to prove the look.",
+      "Batch related sprites, icons, states, and VFX into grid/contact sheets first, then slice and review the cells.",
+      "Generate animation frames with grid sheets, locked seeds, and consistent camera language.",
       "Generate audio after core interactions are known.",
       "Run adapt tools on any externally produced assets before importing into Cocos."
     ],
@@ -562,9 +568,9 @@ function recommendationsFor(type: string, style: string) {
   switch (type) {
     case "sprites":
       return [
-        { tool: "asset_forge_generate_sprite", name: "player", promptHint: `main controllable character, ${style}, flat chroma key background` },
-        { tool: "asset_forge_generate_sprite", name: "enemy-basic", promptHint: `basic enemy readable silhouette, ${style}, flat chroma key background` },
-        { tool: "asset_forge_generate_sprite", name: "pickup", promptHint: `collectible reward item, high readability, ${style}` }
+        { tool: "asset_forge_generate_sprite", name: "style-anchor", promptHint: `single style anchor only when the look is still unproven, ${style}, flat chroma key background` },
+        { tool: "asset_forge_generate_sprite_grid_sheet", name: "first-loop-sprite-pack", promptHint: `3x3 asset-pack contact sheet containing player, 3 enemies, 2 pickups, 2 projectiles, 1 warning marker, ${style}, flat key-color background` },
+        { tool: "asset_forge_generate_sprite_grid_sheet", name: "enemy-variant-pack", promptHint: `4x3 enemy-pack contact sheet with related enemy silhouettes, threat tiers, and readable mobile shapes, ${style}` }
       ];
     case "sprite_sheets":
       return [
@@ -609,6 +615,21 @@ function buildGridPrompt(input: {
     : input.background === "transparent"
       ? "transparent background inside every cell"
       : "plain white background inside every cell";
+  const isVariantGrid = isVariantGridAction(input.action);
+  if (isVariantGrid) {
+    return [
+      input.prompt,
+      `Create a single ${input.columns} columns by ${input.rows} rows contact sheet for the Cocos asset pack/state set "${input.action}".`,
+      `Exactly ${input.frameCount} usable cells, each cell centered in a ${input.frameWidth}x${input.frameHeight} area.`,
+      "Each cell must contain one complete asset, state, icon, prop, enemy, pickup, projectile, or VFX element requested by the prompt.",
+      "Keep the same art bible, camera language, outline weight, lighting direction, value range, and palette across all cells.",
+      "Make each cell distinct in gameplay role or state; avoid near-duplicates unless the prompt asks for variants.",
+      "No grid lines, labels, text, numbers, watermarks, collages, cropped subjects, merged cells, or multi-subject clutter inside a cell.",
+      "Leave comfortable empty space around each subject for clean slicing and Cocos pivots.",
+      `Use ${background}.`,
+      "Order cells left to right, top to bottom."
+    ].join("\n");
+  }
   const motionGuide = motionGuideForAction(input.action, input.frameCount);
   return [
     input.prompt,
@@ -624,6 +645,10 @@ function buildGridPrompt(input: {
     `Use ${background}.`,
     "Order frames left to right, top to bottom."
   ].join("\n");
+}
+
+function isVariantGridAction(action: string): boolean {
+  return /(asset|sprite|variant|variants|state|states|set|pack|icons?|items?|props?|enemies|enemy|pickups?|projectiles?|vfx|ui)/i.test(action);
 }
 
 function motionGuideForAction(action: string, frameCount: number): string {

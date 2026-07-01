@@ -40,6 +40,7 @@ If one of these tools is unavailable, use the closest available MCP tool and cle
    - Identify whether the asset is a placeholder, production candidate, UI element, gameplay sprite, animation, tileset, effect, or imported external source.
    - Identify target platform constraints: mobile, web, mini-game, playable ad, desktop, or editor-only prototype.
    - For a from-zero playable slice, define the minimum asset pack before implementation starts: gameplay placeholders, UI/HUD art, feedback/VFX cues, SFX, and optional short music loop. If the slice intentionally uses engine geometry only, record that as a deliberate prototype constraint instead of silently skipping the asset pipeline.
+   - Apply a batch-first cost policy for generated images: related sprites, states, VFX frames, icons, pickups, enemy variants, projectiles, and props should be generated as one or more grid/contact sheets and sliced into frames. Use one-by-one sprite generation only for a style anchor, a uniquely important hero asset, or a failed cell that cannot be adapted.
 3. Establish a compact art bible.
    - Capture camera/view, palette, outline style, rendering style, scale, silhouette rules, UI material, lighting, and negative prompts.
    - Reuse existing canonical assets when present instead of regenerating known characters or UI styles.
@@ -56,8 +57,9 @@ If one of these tools is unavailable, use the closest available MCP tool and cle
 
 | Runtime job | Preferred tool | Notes |
 |---|---|---|
-| Character, prop, pickup, icon, marker, static effect | `asset_forge_generate_sprite` | Request transparent background and mobile-readable silhouette. |
-| Character animation, repeated state frames, short VFX burst | `asset_forge_generate_sprite_grid_sheet` | Prefer contact-sheet generation for consistency across frames. |
+| Style anchor or uniquely important single hero sprite | `asset_forge_generate_sprite` | Use sparingly. This proves a look or fixes one failed asset, but should not be the default for packs. |
+| Related static sprites, variants, props, pickups, projectiles, icons, state sets, or short VFX bursts | `asset_forge_generate_sprite_grid_sheet` | Batch into one contact sheet, slice cells, then review before import to reduce provider calls and cost. |
+| Character animation, repeated state frames, short VFX burst | `asset_forge_generate_sprite_grid_sheet` | Prefer contact-sheet generation for consistency across frames and lower generation cost. |
 | Animation requiring separately generated frames | `asset_forge_generate_sprite_sheet` | Use when grid/contact-sheet output is unsuitable for the motion. |
 | Terrain, modular map pieces, platform tiles, wall/floor/corner sets | `asset_forge_generate_tileset` | Specify tile size, tile count, and target camera scale. |
 | HUD, buttons, panels, meters, cursors, badges, inventory/shop icons | `asset_forge_generate_ui_pack` | Avoid accidental text unless text is explicitly part of the asset. |
@@ -72,7 +74,7 @@ Only use audio generation or adaptation if the matching audio MCP tool is actual
 
 For a new playable local game, do not default to geometry-only visuals unless the user explicitly asks for a logic-only prototype or the asset MCP is unavailable. Prepare the smallest useful pack:
 
-- core gameplay sprites or placeholder tiles for player pieces, hazards, pickups, board cells, or equivalent interactables
+- core gameplay sprites or placeholder tiles for player pieces, hazards, pickups, board cells, or equivalent interactables, batched into grid/contact sheets whenever multiple related visuals are needed
 - required first-loop animated assets such as player thrust, hit/death feedback, explosion, pickup, warning, muzzle flash, or UI state frames when those cues carry readability or game feel
 - minimal background or playfield frame when it improves readability
 - HUD/UI elements needed for score, pause, restart, result, and primary actions
@@ -98,6 +100,20 @@ For generated visual assets, include the following constraints unless they confl
 For sprite sheets and grid sheets, also specify frame count, rows/columns when known, action name, full motion cycle, consistent facing direction, consistent proportions, and whether the first/last frame should loop.
 
 Prefer stable seeds for related assets in the same character, faction, UI theme, tileset, or effect family.
+
+## Batch-First Cost Policy
+
+For AI image generation, the default should be "one generation produces many usable cells." Prefer grid/contact sheets for:
+
+- first-loop sprite packs such as player, enemies, pickups, projectiles, hazards, and markers
+- enemy or prop variants within one faction or biome
+- UI icon sets, reward icons, item icons, and meter states
+- VFX bursts, hit frames, warning markers, muzzle flashes, and pickup pulses
+- character state sets and animation frames
+
+Single-image generation is acceptable for a style anchor, a highly important hero asset, an external image adaptation, or a targeted retry of one failed cell. When using one-by-one generation for multiple related images, state the reason; otherwise batch and slice first.
+
+For batched static packs, set the grid action to a pack intent such as `asset-pack`, `variant-pack`, `state-set`, `icon-pack`, `enemy-pack`, or `pickup-pack`, and describe the expected content of each cell in the prompt.
 
 ## Direction And Animation Contracts
 
@@ -142,6 +158,7 @@ Before finalizing an asset task, verify the relevant gates and report any skippe
 
 - Output files exist at the generated or imported paths.
 - PNG assets intended as sprites preserve transparency after postprocessing.
+- Related generated images were batched into grid/contact sheets unless a style-anchor, hero-asset, provider-failure, or targeted-retry reason was reported.
 - Gameplay-critical assets pass semantic fit, style consistency, alpha/silhouette, animation, mobile readability, audio/feedback, performance, and collision-fit review before import.
 - Sprite sheets have expected frame count, rows/columns, padding, and metadata.
 - Animation frames keep stable proportions, facing direction, and readable action.

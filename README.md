@@ -60,18 +60,26 @@ Cocos Creator supports workflows such as SpriteFrame creation from textures, Aut
 | `asset_forge_adapt_image` | Convert an existing image into a Cocos-ready PNG. |
 | `asset_forge_adapt_audio` | Convert an existing audio file into a Cocos-ready AudioClip file. |
 
-## Companion Codex Skill
+## Companion Codex Skills
 
-This repository includes a companion Codex skill under [`skills/cocos-asset-pipeline-director`](./skills/cocos-asset-pipeline-director). The MCP provides the executable asset tools; the skill teaches an agent how to plan Cocos-ready asset packs, choose the right tool, write stable prompts, preserve generated metadata, and verify outputs before import.
+This repository includes companion Codex skills under [`skills/`](./skills). The MCP provides the executable asset tools; the skills teach an agent how to define art direction, plan Cocos-ready asset packs, choose the right tool, batch related images into contact sheets when practical, preserve generated metadata, and verify outputs before import.
 
-To install it for Codex:
+Included skills:
+
+- [`cocos-art-direction-director`](./skills/cocos-art-direction-director): define art bibles, prompt language, visual consistency, readability, and Cocos-ready art QA before generation.
+- [`cocos-asset-pipeline-director`](./skills/cocos-asset-pipeline-director): plan and validate Cocos Creator asset work through the `cocos_asset_forge` MCP tools.
+- [`cocos-asset-review-director`](./skills/cocos-asset-review-director): review generated Cocos assets before they are wired into gameplay.
+
+To install them for Codex:
 
 ```bash
 mkdir -p ~/.codex/skills
+cp -R skills/cocos-art-direction-director ~/.codex/skills/
 cp -R skills/cocos-asset-pipeline-director ~/.codex/skills/
+cp -R skills/cocos-asset-review-director ~/.codex/skills/
 ```
 
-Use the skill together with an MCP client entry that exposes this server as `cocos_asset_forge`.
+Use these skills together with an MCP client entry that exposes this server as `cocos_asset_forge`.
 
 ## Install
 

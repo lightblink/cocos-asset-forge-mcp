@@ -62,8 +62,8 @@ export const generateSpriteSheetInput = z.object({
 
 export const generateSpriteGridSheetInput = z.object({
   name: assetName,
-  prompt: z.string().min(1).describe("Describe the same character/object and the complete motion/state set."),
-  action: z.string().default("idle"),
+  prompt: z.string().min(1).describe("Describe the same character/object animation, or a related multi-asset pack to generate in one contact sheet."),
+  action: z.string().default("idle").describe("Animation action such as idle/run/attack, or pack intent such as asset-pack, variant-pack, state-set, icon-pack, enemy-pack, or pickup-pack."),
   rows: z.number().int().min(1).max(8).default(3),
   columns: z.number().int().min(1).max(8).default(3),
   frameCount: z.number().int().min(1).max(64).optional(),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseConfig, redactConfig } from "../src/config/load.js";
 import { createImageProvider } from "../src/generation/factory.js";
+import { planPack } from "../src/tools/register.js";
 
 describe("provider configuration", () => {
   it("accepts inline apiKey values and redacts them for config reporting", () => {
@@ -52,5 +53,21 @@ describe("provider configuration", () => {
     expect(huggingFace.config.kind).toBe("huggingface-image");
     expect(siliconFlow.config.kind).toBe("siliconflow-image");
     expect(modelScope.config.kind).toBe("modelscope-image");
+  });
+});
+
+describe("asset pack planning", () => {
+  it("recommends grid/contact sheets before one-by-one sprite generation for related sprites", () => {
+    const plan = planPack({
+      gameDescription: "vertical shooter",
+      targetPlatform: "wechatgame",
+      artDirection: "neon arcade ships",
+      assetTypes: ["sprites"]
+    });
+
+    const tools = plan.assets.map((asset) => asset.tool);
+    expect(tools.filter((tool) => tool === "asset_forge_generate_sprite_grid_sheet").length).toBeGreaterThanOrEqual(2);
+    expect(plan.recommendedOrder.join(" ")).toContain("Batch related sprites");
+    expect(plan.assets.find((asset) => asset.name === "style-anchor")?.promptHint).toContain("single style anchor only");
   });
 });

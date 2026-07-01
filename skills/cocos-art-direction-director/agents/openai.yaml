@@ -1,0 +1,10 @@
+interface:
+  display_name: "Cocos Art Direction Director"
+  short_description: "Direct coherent Cocos game art pipelines"
+  default_prompt: "Use $cocos-art-direction-director to create an art bible and asset generation plan."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "cocos_asset_forge"
+      description: "Optional companion MCP used by the asset pipeline after this skill defines visual direction and acceptance criteria."
