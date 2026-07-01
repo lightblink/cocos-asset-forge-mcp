@@ -472,7 +472,19 @@ function floodFillBackgroundMask(
 
 function isBackgroundLike(data: Buffer, offset: number, key: Rgb, tolerance: number): boolean {
   if (data[offset + 3] <= 8) return true;
+  if (isGreenKey(key) && isDominantGreen(data, offset)) return true;
   return colorDistance(data, offset, key) <= tolerance;
+}
+
+function isGreenKey(key: Rgb): boolean {
+  return key.g > 180 && key.r < 80 && key.b < 80;
+}
+
+function isDominantGreen(data: Buffer, offset: number): boolean {
+  const r = data[offset];
+  const g = data[offset + 1];
+  const b = data[offset + 2];
+  return g >= 40 && g - r >= 24 && g - b >= 24 && g > r * 1.35 && g > b * 1.35;
 }
 
 function colorDistance(data: Buffer, offset: number, key: Rgb): number {
