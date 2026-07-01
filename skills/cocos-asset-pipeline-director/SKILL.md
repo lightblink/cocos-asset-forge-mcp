@@ -11,7 +11,7 @@ Use this skill to direct Cocos Creator asset work through a dedicated asset-gene
 
 The skill is intentionally a pipeline layer, not a competing image model wrapper. If the configured MCP can produce or adapt the requested asset, use it first.
 
-Use `cocos-asset-review-director` after generation or adaptation when assets will be imported into gameplay, especially for player/enemy sprites, sprite sheets, VFX, UI packs, directional art, or anything whose readability affects the first loop.
+Use `cocos-asset-review-director` after generation or adaptation when assets will be imported into gameplay, especially for player/enemy sprites, sprite sheets, VFX, UI packs, audio cues, directional or semantic art, or anything whose readability affects the first loop.
 
 ## Compatibility
 
@@ -46,8 +46,8 @@ If one of these tools is unavailable, use the closest available MCP tool and cle
 4. Select the MCP pipeline by runtime job.
 5. Generate into the MCP output directory unless the user provides a project-specific output path.
 6. Review outputs before import.
-   - For gameplay-critical sprites and VFX, apply an explicit asset contract: role, facing direction, runtime size, motion requirement, alpha policy, collision expectation, and import target.
-   - Use `cocos-asset-review-director` for design fit, orientation, animation readiness, alpha/silhouette issues, mobile thumbnail readability, and collision fit.
+   - For gameplay-critical sprites and VFX, apply an explicit asset contract: role, gameplay meaning, runtime size, motion requirement, style constraints, alpha policy, collision expectation, and import target.
+   - Use `cocos-asset-review-director` for design fit, gameplay semantics, style consistency, animation readiness, alpha/silhouette issues, mobile thumbnail readability, collision fit, audio fit, and performance risk.
    - Do not import failed production-candidate assets silently. Adapt or regenerate the smallest failed unit.
 7. Import or stage assets under Cocos-friendly project folders only when requested or clearly required by the task.
 8. Report exact paths, tool choices, generation settings, review status, and any rejected or deferred assets.
@@ -142,7 +142,7 @@ Before finalizing an asset task, verify the relevant gates and report any skippe
 
 - Output files exist at the generated or imported paths.
 - PNG assets intended as sprites preserve transparency after postprocessing.
-- Gameplay-critical sprites pass role, orientation, alpha/silhouette, mobile readability, and collision-fit review before import.
+- Gameplay-critical assets pass semantic fit, style consistency, alpha/silhouette, animation, mobile readability, audio/feedback, performance, and collision-fit review before import.
 - Sprite sheets have expected frame count, rows/columns, padding, and metadata.
 - Animation frames keep stable proportions, facing direction, and readable action.
 - Tilesets have consistent tile dimensions and enough modular pieces for the requested map use.
