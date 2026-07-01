@@ -15,6 +15,7 @@ An MCP server for AI-assisted Cocos Creator asset production. Coding agents such
 
 - [Install](#install)
 - [MCP client config](#mcp-client-config)
+- [Companion Codex skill](#companion-codex-skill)
 - [LLM install prompt](./docs/installation.md#llm-install-prompt)
 - [Uninstall](#uninstall)
 - [Generation strategy](#generation-strategy)
@@ -58,6 +59,19 @@ Cocos Creator supports workflows such as SpriteFrame creation from textures, Aut
 | `asset_forge_generate_music_loop` | Generate/transcode loop-oriented background music. |
 | `asset_forge_adapt_image` | Convert an existing image into a Cocos-ready PNG. |
 | `asset_forge_adapt_audio` | Convert an existing audio file into a Cocos-ready AudioClip file. |
+
+## Companion Codex Skill
+
+This repository includes a companion Codex skill under [`skills/cocos-asset-pipeline-director`](./skills/cocos-asset-pipeline-director). The MCP provides the executable asset tools; the skill teaches an agent how to plan Cocos-ready asset packs, choose the right tool, write stable prompts, preserve generated metadata, and verify outputs before import.
+
+To install it for Codex:
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R skills/cocos-asset-pipeline-director ~/.codex/skills/
+```
+
+Use the skill together with an MCP client entry that exposes this server as `cocos_asset_forge`.
 
 ## Install
 

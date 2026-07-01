@@ -10,7 +10,8 @@
     "dist",
     "README.md",
     "docs",
-    "examples"
+    "examples",
+    "skills"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
