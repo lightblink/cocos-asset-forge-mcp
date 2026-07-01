@@ -1,0 +1,60 @@
+{
+  "name": "cocos-asset-forge-mcp",
+  "version": "0.1.0",
+  "description": "An MCP server that generates and adapts AI-made game assets into Cocos Creator-ready files.",
+  "type": "module",
+  "bin": {
+    "cocos-asset-forge-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "examples"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cocos",
+    "cocos-creator",
+    "game-assets",
+    "sprite",
+    "tileset",
+    "audio",
+    "ai"
+  ],
+  "author": "lightblink",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lightblink/cocos-asset-forge-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lightblink/cocos-asset-forge-mcp/issues"
+  },
+  "homepage": "https://github.com/lightblink/cocos-asset-forge-mcp#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fal-ai/client": "^1.10.1",
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "commander": "^14.0.0",
+    "dotenv": "^17.4.2",
+    "sharp": "^0.34.4",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

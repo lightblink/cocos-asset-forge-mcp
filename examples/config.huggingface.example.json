@@ -1,0 +1,19 @@
+{
+  "defaultOutputDir": "./generated/cocos-assets",
+  "imageProvider": {
+    "kind": "huggingface-image",
+    "name": "hf-flux-dev",
+    "apiKey": "replace-with-your-hf-token",
+    "model": "black-forest-labs/FLUX.1-dev",
+    "requestTemplate": {
+      "parameters": {
+        "num_inference_steps": 28,
+        "guidance_scale": 3.5
+      }
+    }
+  },
+  "audioProvider": {
+    "kind": "mock",
+    "name": "mock-audio"
+  }
+}

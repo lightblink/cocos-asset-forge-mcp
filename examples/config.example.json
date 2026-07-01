@@ -1,0 +1,23 @@
+{
+  "defaultOutputDir": "./generated/cocos-assets",
+  "imageProvider": {
+    "kind": "mock",
+    "name": "mock-image",
+    "headers": {},
+    "timeoutMs": 120000
+  },
+  "audioProvider": {
+    "kind": "mock",
+    "name": "mock-audio",
+    "headers": {},
+    "timeoutMs": 120000
+  },
+  "cocos": {
+    "creatorVersion": "3.x",
+    "assetRoot": "assets"
+  },
+  "safety": {
+    "overwrite": false,
+    "allowNetworkProviders": true
+  }
+}

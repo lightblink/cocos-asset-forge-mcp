@@ -1,0 +1,16 @@
+{
+  "defaultOutputDir": "./generated/cocos-assets",
+  "imageProvider": {
+    "kind": "modelscope-image",
+    "name": "modelscope-custom-image",
+    "baseUrl": "https://replace-with-your-modelscope-image-endpoint",
+    "apiKey": "replace-with-your-modelscope-token",
+    "model": "replace-with-your-modelscope-model-id",
+    "responsePath": "data.0.url",
+    "requestTemplate": {}
+  },
+  "audioProvider": {
+    "kind": "mock",
+    "name": "mock-audio"
+  }
+}

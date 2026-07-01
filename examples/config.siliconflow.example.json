@@ -1,0 +1,14 @@
+{
+  "defaultOutputDir": "./generated/cocos-assets",
+  "imageProvider": {
+    "kind": "siliconflow-image",
+    "name": "siliconflow-kolors",
+    "baseUrl": "https://api.siliconflow.cn",
+    "apiKey": "replace-with-your-siliconflow-key",
+    "model": "Kwai-Kolors/Kolors"
+  },
+  "audioProvider": {
+    "kind": "mock",
+    "name": "mock-audio"
+  }
+}

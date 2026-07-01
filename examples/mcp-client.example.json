@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cocos-asset-forge": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/cocos-asset-forge-mcp/dist/index.js",
+        "--config",
+        "/absolute/path/to/cocos-asset-forge-mcp/examples/config.example.json"
+      ]
+    }
+  }
+}
